@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "langhack",
+  "project_id": "982b9179-5e3e-46f8-9e0c-cf086836a156"
+}
