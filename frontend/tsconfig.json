@@ -4,8 +4,15 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
-    }
+      "@/*": [
+        "src/*"
+      ]
+    },
+    "module": "esnext"
   },
-  "include": ["**/*.ts", "**/*.tsx", "src/**/*"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "src/**/*"
+  ]
 }
