@@ -237,8 +237,8 @@ VOICE STYLE:
 |----------|--------|-------------|
 | `GET /scenarios` | GET | Returns list of available scenarios |
 | `POST /scenarios/generate` | POST | Invokes Scenario Agent to generate new scenarios |
-| `POST /feedback` | POST | Invokes Teacher Agent for post-session evaluation |
-| `POST /transcripts/upload` | POST | Uploads transcript to Box.com |
+| `POST /feedback` | POST | Invokes Teacher Agent for post-session evaluation (returns score + pass/fail + feedback) |
+| `POST /transcripts/upload` | POST | Uploads Session_Report (transcript + Teacher Agent analysis) to Box.com |
 | `GET /health` | GET | Health check endpoint |
 | `WebSocket /ws` | WS | Real-time voice session via BidiAgent |
 
@@ -251,7 +251,11 @@ from pydantic import BaseModel
 # Teacher Agent (standard LLM call, not BidiAgent)
 @app.post("/feedback")
 async def get_feedback(request: FeedbackRequest) -> FeedbackResponse:
-    """Invoke Teacher Agent for post-session evaluation."""
+    """Invoke Teacher Agent for post-session evaluation.
+    
+    Returns structured feedback including Session_Score (0-100) and
+    Session_Pass_Fail (pass if score >= 60, fail otherwise).
+    """
     # Uses standard Bedrock Converse API or Strands Agent (non-bidi)
     feedback = await invoke_teacher_agent(
         transcript=request.transcript,
@@ -264,22 +268,32 @@ async def get_feedback(request: FeedbackRequest) -> FeedbackResponse:
 # Scenario Agent (standard LLM call with Apify tool)
 @app.post("/scenarios/generate")
 async def generate_scenarios(request: GenerateRequest) -> GenerateResponse:
-    """Invoke Scenario Agent to generate new scenarios."""
+    """Invoke Scenario Agent to generate new scenarios.
+    
+    If destination is provided, invokes TripAdvisor scraper for real place data.
+    Falls back to generic scenarios if scraping fails.
+    """
     scenarios = await invoke_scenario_agent(
         target_language=request.target_language,
         proficiency_context=request.proficiency_context,
+        destination=request.destination,
     )
     return GenerateResponse(scenarios=scenarios, success=True)
 
 
-# Box upload
+# Box upload — now accepts full Session_Report (transcript + feedback)
 @app.post("/transcripts/upload")
 async def upload_transcript(request: UploadRequest) -> UploadResponse:
-    """Upload transcript to Box.com."""
+    """Upload Session_Report to Box.com.
+    
+    The Session_Report includes the full transcript text plus the Teacher Agent
+    analysis (score, pass/fail, highlights, corrections, vocabulary, lesson plan).
+    """
     box_url = await upload_to_box(
         transcript=request.transcript,
         session_date=request.session_date,
         scenario_title=request.scenario_title,
+        feedback=request.feedback,
     )
     return UploadResponse(box_file_url=box_url)
 ```
@@ -385,8 +399,217 @@ graph LR
 ```
 
 - **Conversation Agent (BidiAgent)**: Handles real-time voice role-play via Nova Sonic v2. The scenario context goes in the `system_prompt`. Tool calls execute concurrently with audio streaming — no blocking, no silence gap.
-- **Teacher Agent**: A standard Strands Agent (non-bidi) or direct Bedrock Converse call. Receives transcript text, produces structured feedback. Invoked via REST after session ends.
-- **Scenario Agent**: A standard Strands Agent with Apify as a `@tool`. Scrapes phrasebook content and transforms it into structured scenarios. Invoked via REST.
+- **Teacher Agent**: A standard Strands Agent (non-bidi) or direct Bedrock Converse call. Receives transcript text, produces structured feedback including a Session_Score (0-100) and Session_Pass_Fail (pass if score ≥ 60). Invoked automatically via REST when a session ends — no user action required.
+- **Scenario Agent**: A standard Strands Agent with Apify as a `@tool`. Scrapes phrasebook content and TripAdvisor destination data, then transforms it into structured scenarios. When a `destination` parameter is provided, the agent invokes the TripAdvisor scraper to generate travel scenarios grounded in real place names. Invoked via REST.
+
+### TripAdvisor Scraper Integration (Scenario Agent)
+
+The Scenario Agent uses the Apify TripAdvisor scraper actor to generate travel scenarios grounded in real destination data. This flow is triggered when the `POST /scenarios/generate` endpoint receives a request with an optional `destination` parameter.
+
+#### Scraping Flow
+
+```mermaid
+sequenceDiagram
+    participant App as React Frontend
+    participant API as FastAPI Server
+    participant Agent as Scenario Agent
+    participant Apify as Apify Platform
+    participant TA as TripAdvisor (via Actor)
+
+    App->>API: POST /scenarios/generate {target_language, destination?}
+    API->>Agent: Invoke with target_language, destination
+    alt destination provided
+        Agent->>Apify: Run actor maxcopell/tripadvisor<br/>{query: destination, maxItemsPerQuery: 20}
+    else no destination, language has known region
+        Agent->>Agent: Select default destination for language
+        Agent->>Apify: Run actor maxcopell/tripadvisor<br/>{query: default_destination, maxItemsPerQuery: 20}
+    end
+    Apify->>TA: Scrape attractions, restaurants, hotels
+    TA-->>Apify: Raw listing data
+    Apify-->>Agent: Scraped results (max 20 per category)
+    Agent->>Agent: Filter invalid entries (closed, insufficient data)
+    Agent->>Agent: Transform to Travel_Scenario objects
+    Agent-->>API: List[Scenario] with source="generated"
+    API-->>App: ScenarioGenerationResponse
+
+    alt Apify fails / no results
+        Agent->>Agent: Generate generic travel scenarios (fallback)
+        Agent-->>API: Fallback scenarios
+    end
+```
+
+#### Apify Actor Configuration
+
+The TripAdvisor scraper uses the `maxcopell/tripadvisor` actor (Apify actor ID: `dbEyMBriog95Fv8CW`).
+
+```python
+TRIPADVISOR_ACTOR_ID = "maxcopell/tripadvisor"
+
+# Input parameters for the Apify actor
+tripadvisor_input = {
+    "query": destination,              # e.g., "Barcelona" or "Tokyo"
+    "maxItemsPerQuery": 20,            # Limit per category for cost/speed
+    "includeAttractions": True,
+    "includeRestaurants": True,
+    "includeHotels": True,
+    "language": target_language,       # ISO 639-1 code (e.g., "es", "fr")
+}
+```
+
+The actor is invoked via the Apify REST API:
+
+```python
+import httpx
+
+async def invoke_tripadvisor_scraper(
+    destination: str,
+    target_language: str,
+    apify_token: str,
+) -> list[dict]:
+    """Invoke the Apify TripAdvisor actor and return scraped results."""
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        # Start actor run
+        response = await client.post(
+            f"https://api.apify.com/v2/acts/{TRIPADVISOR_ACTOR_ID}/runs",
+            params={"token": apify_token},
+            json={
+                "query": destination,
+                "maxItemsPerQuery": 20,
+                "includeAttractions": True,
+                "includeRestaurants": True,
+                "includeHotels": True,
+                "language": target_language,
+            },
+        )
+        run_data = response.json()["data"]
+        run_id = run_data["id"]
+
+        # Wait for completion (poll or use waitForFinish param)
+        dataset_response = await client.get(
+            f"https://api.apify.com/v2/actor-runs/{run_id}/dataset/items",
+            params={"token": apify_token},
+        )
+        return dataset_response.json()
+```
+
+#### Scraped Data Model (Raw TripAdvisor Output)
+
+The Apify actor returns items with the following relevant fields:
+
+```typescript
+interface TripAdvisorScrapedItem {
+  type: "ATTRACTION" | "RESTAURANT" | "HOTEL";
+  name: string;                    // e.g., "Sagrada Familia"
+  address: string;                 // Full street address
+  description?: string;            // Brief description if available
+  rating?: number;                 // 1-5 rating
+  numberOfReviews?: number;
+  category?: string;               // Sub-category (e.g., "Architectural Buildings")
+  cuisine?: string[];              // Restaurant-specific
+  priceLevel?: string;             // e.g., "$$ - $$$"
+  url?: string;                    // TripAdvisor URL
+  rankingPosition?: number;
+  isClosed?: boolean;              // Used for filtering
+}
+```
+
+#### Transformation Logic: Scraped Data → Travel Scenarios
+
+```python
+from app.scenarios import Scenario
+
+# Default destinations by language (used when no destination is specified)
+DEFAULT_DESTINATIONS: dict[str, str] = {
+    "es": "Barcelona",
+    "fr": "Paris",
+    "de": "Berlin",
+    "it": "Rome",
+    "pt": "Lisbon",
+    "ja": "Tokyo",
+    "ko": "Seoul",
+    "zh": "Beijing",
+}
+
+SCENARIO_TEMPLATES = {
+    "ATTRACTION": {
+        "title_template": "Ask for directions to {name}",
+        "description_template": "Practice asking locals how to reach {name} ({category}), understand landmarks, and confirm walking directions.",
+        "prompt_template": "You are a helpful local near {name} in {destination}. Help the learner find their way to {name} at {address}.",
+        "vocab_base": ["¿Dónde está...?", "how far", "turn left", "straight ahead"],
+    },
+    "RESTAURANT": {
+        "title_template": "Order food at {name}",
+        "description_template": "Practice ordering a meal at {name}, asking about the menu, and handling payment.",
+        "prompt_template": "You are a waiter at {name} in {destination} ({address}). Help the learner order food and navigate the menu.",
+        "vocab_base": ["the menu", "I would like", "the bill", "recommend"],
+    },
+    "HOTEL": {
+        "title_template": "Check in at {name}",
+        "description_template": "Practice checking in at {name}, confirming your reservation, and asking about amenities.",
+        "prompt_template": "You are a receptionist at {name} in {destination} ({address}). Help the learner check in and understand hotel services.",
+        "vocab_base": ["reservation", "room key", "checkout time", "breakfast"],
+    },
+}
+
+
+def filter_scraped_items(items: list[dict]) -> list[dict]:
+    """Filter out closed establishments and entries with insufficient data."""
+    return [
+        item for item in items
+        if not item.get("isClosed", False)
+        and item.get("name")
+        and item.get("address")
+        and item.get("type") in ("ATTRACTION", "RESTAURANT", "HOTEL")
+    ]
+
+
+def transform_to_scenarios(
+    items: list[dict],
+    destination: str,
+    target_language: str,
+) -> list[Scenario]:
+    """Transform filtered TripAdvisor items into Travel_Scenario objects."""
+    scenarios = []
+    for item in items:
+        item_type = item["type"]
+        template = SCENARIO_TEMPLATES[item_type]
+        name = item["name"]
+
+        # Build key_vocabulary from scraped content + template base
+        key_vocab = list(template["vocab_base"])
+        key_vocab.append(name)  # Include the real place name
+        if item.get("address"):
+            key_vocab.append(item["address"])
+        if item.get("cuisine"):
+            key_vocab.extend(item["cuisine"][:2])
+
+        scenario = Scenario(
+            id=f"generated-travel-{target_language}-{name.lower().replace(' ', '-')[:30]}",
+            title=template["title_template"].format(name=name),
+            description=template["description_template"].format(
+                name=name, category=item.get("category", "landmark")
+            )[:150],
+            target_language=target_language,
+            key_vocabulary=key_vocab,
+            system_prompt=template["prompt_template"].format(
+                name=name, destination=destination, address=item.get("address", "")
+            ),
+            source="generated",
+            created_at=datetime.now(UTC).isoformat(),
+        )
+        scenarios.append(scenario)
+    return scenarios
+```
+
+#### Category Coverage Strategy
+
+The transformation ensures at least 3 scenario categories are represented by selecting items from each type:
+
+1. **Attractions** → "Ask for directions" scenarios
+2. **Restaurants** → "Order food" scenarios
+3. **Hotels** → "Check in" scenarios
+
+If any category has zero results after filtering, the agent generates a generic scenario for that category using the destination name (e.g., "Ask for directions in {destination}").
 
 ### Mobile App Component Architecture
 
@@ -395,7 +618,7 @@ graph TB
     subgraph Screens
         ScenarioList[Scenario List Screen]
         Session[Session Screen]
-        PostSession[Post-Session Review Screen]
+        PostSession[Post-Session Review Screen<br/>Gamified UI]
         History[Transcript History Screen]
         Settings[Settings Screen]
     end
@@ -406,6 +629,7 @@ graph TB
         AudioPlaybackService[Audio Playback<br/>24kHz AudioWorklet]
         StorageService[Storage Service<br/>AsyncStorage + SQLite]
         APIService[REST API Service]
+        AchievementService[Achievement Service<br/>Milestone Tracking]
     end
 
     ScenarioList --> APIService
@@ -413,11 +637,173 @@ graph TB
     Session --> AudioCaptureService
     Session --> AudioPlaybackService
     PostSession --> APIService
+    PostSession --> AchievementService
     History --> StorageService
     Settings --> StorageService
     WebSocketService --> AudioCaptureService
     WebSocketService --> AudioPlaybackService
 ```
+
+### Automatic Post-Session Flow
+
+When a session ends, the app automatically triggers a sequential pipeline: Teacher Agent evaluation → Box upload with combined Session_Report. No user action is required.
+
+```mermaid
+sequenceDiagram
+    participant App as React Frontend
+    participant API as FastAPI Server
+    participant Teacher as Teacher Agent
+    participant Box as Box.com API
+
+    Note over App: Session ends (user taps stop or scenario completes)
+    App->>App: Persist transcript locally (immediate)
+    App->>App: Navigate to PostSessionScreen (show loading animation)
+
+    App->>API: POST /feedback {transcript, target_language, source_language, available_scenarios}
+    API->>Teacher: Invoke Teacher Agent with transcript
+    Teacher-->>API: SessionFeedback {score, pass_fail, highlights, corrections, vocabulary, scenarios, lesson_plan}
+    API-->>App: FeedbackResponse {success: true, feedback: SessionFeedback}
+
+    App->>App: Display gamified feedback (score animation, pass/fail badge, colors)
+    App->>App: Persist feedback locally alongside transcript
+    App->>App: Check & award Achievement_Badges
+
+    App->>API: POST /transcripts/upload {transcript, feedback, session_date, scenario_title}
+    API->>Box: Upload Session_Report (transcript + full Teacher Agent analysis)
+    Box-->>API: File created, return URL
+    API-->>App: UploadResponse {box_file_url}
+
+    App->>App: Store box_file_url in local session record
+    App->>App: Show "View in Box" link
+
+    Note over App: If feedback fails: show retry option, skip Box upload
+    Note over App: If Box upload fails: show "cloud backup failed", offer retry
+```
+
+## Gamified Post-Session Review UI
+
+The Post-Session Review screen uses gamification elements to make feedback engaging and motivating. The UI architecture is built around animations, color-coded sections, and achievement tracking.
+
+### UI Architecture
+
+```mermaid
+graph TB
+    subgraph PostSessionScreen["Post-Session Review Screen"]
+        LoadingState[Loading State<br/>Progress animation while Teacher Agent evaluates]
+        PassFailBadge[Pass/Fail Badge<br/>Large banner at top]
+        ScoreDisplay[Score Display<br/>Counting-up animation 0→final]
+        Animations[Result Animation<br/>Confetti on pass / Encouragement on fail]
+        FeedbackSections[Color-Coded Feedback Sections]
+        Achievements[Achievement Badges<br/>Scale-up entrance animation]
+    end
+
+    subgraph FeedbackDetail["Feedback Sections"]
+        Highlights[Performance Highlights<br/>Green background tint]
+        Corrections[Corrections<br/>Red background tint]
+        Vocabulary[Suggested Vocabulary<br/>Blue background tint]
+        Improvements[Areas for Improvement]
+        Scenarios[Suggested Scenarios]
+        LessonPlan[Lesson Plan]
+    end
+
+    LoadingState -->|Feedback received| PassFailBadge
+    PassFailBadge --> ScoreDisplay
+    ScoreDisplay --> Animations
+    Animations --> FeedbackSections
+    FeedbackSections --> Achievements
+    FeedbackSections --> FeedbackDetail
+```
+
+### Animation System
+
+**Library**: React Native Reanimated (preferred for performance) or Lottie for pre-built animations.
+
+| Animation | Trigger | Duration | Implementation |
+|-----------|---------|----------|----------------|
+| Score count-up | Feedback received | 1-2 seconds | `withTiming` from 0 to `session_score` |
+| Confetti/sparkles | `session_pass_fail === "pass"` | 2-3 seconds | Lottie animation or particle system |
+| Encouraging pulse | `session_pass_fail === "fail"` | 1.5 seconds | `withRepeat(withSequence(scaleUp, scaleDown))` |
+| Badge scale-up | New achievement earned | 0.5 seconds | `withSpring({ damping: 8 })` |
+| Progress spinner | Waiting for Teacher Agent | Indefinite | Rotating/pulsing indicator |
+
+### Score Color Logic
+
+```typescript
+function getScoreColor(score: number): string {
+  if (score >= 80) return '#16a34a';  // Green
+  if (score >= 60) return '#d97706';  // Yellow/Amber
+  return '#dc2626';                    // Red
+}
+
+function getScoreLabel(passFail: "pass" | "fail"): { text: string; color: string } {
+  return passFail === "pass"
+    ? { text: "PASS", color: '#16a34a' }
+    : { text: "KEEP GOING", color: '#dc2626' };
+}
+```
+
+### Color-Coded Feedback Sections
+
+| Section | Background Color | Purpose |
+|---------|-----------------|---------|
+| Performance highlights | `#dcfce7` (light green) | Celebrate what went well |
+| Corrections | `#fee2e2` (light red) | Highlight errors to fix |
+| Suggested vocabulary | `#dbeafe` (light blue) | New learning material |
+| Areas for improvement | `#fef3c7` (light amber) | Neutral improvement areas |
+| Suggested scenarios | Default white | Actionable next steps |
+| Lesson plan | Default white | Study guide |
+
+### Achievement Service
+
+The Achievement Service runs locally on the device, tracking milestones in AsyncStorage. It evaluates milestone conditions after each session completes.
+
+```typescript
+// Achievement evaluation runs after feedback is received
+async function evaluateAchievements(
+  sessionScore: number,
+  achievementState: AchievementState,
+): Promise<AchievementRecord[]> {
+  const newBadges: AchievementRecord[] = [];
+  const now = new Date().toISOString();
+
+  // First session
+  if (achievementState.total_sessions === 0) {
+    newBadges.push({ id: "first-session", label: "First Steps!", icon: "🎯", earned_at: now, session_id: "" });
+  }
+
+  // Streak milestones (consecutive sessions within 48h)
+  const newStreak = achievementState.current_streak + 1;
+  if (newStreak >= 3 && !hasEarned("streak-3")) {
+    newBadges.push({ id: "streak-3", label: "On a Roll!", icon: "🔥", earned_at: now, session_id: "" });
+  }
+  if (newStreak >= 5 && !hasEarned("streak-5")) {
+    newBadges.push({ id: "streak-5", label: "Unstoppable!", icon: "⚡", earned_at: now, session_id: "" });
+  }
+
+  // Perfect score
+  if (sessionScore === 100 && !hasEarned("perfect-score")) {
+    newBadges.push({ id: "perfect-score", label: "Perfect!", icon: "💯", earned_at: now, session_id: "" });
+  }
+
+  // Ten sessions
+  if (achievementState.total_sessions + 1 >= 10 && !hasEarned("ten-sessions")) {
+    newBadges.push({ id: "ten-sessions", label: "Dedicated!", icon: "🏆", earned_at: now, session_id: "" });
+  }
+
+  return newBadges;
+}
+```
+
+### Local Storage for Achievements
+
+Achievement state is persisted in AsyncStorage under the key `@langhack/achievements`. The state is updated atomically after each session:
+
+1. Load current `AchievementState`
+2. Increment `total_sessions`
+3. Update `current_streak` (reset if gap > 48h from `last_session_date`)
+4. Evaluate milestone conditions
+5. Append any new `AchievementRecord` entries to `earned_badges`
+6. Persist updated state
 
 ## Data Models
 
@@ -462,6 +848,8 @@ interface SessionRecord {
 
 ```typescript
 interface SessionFeedback {
+  session_score: number;             // 0-100, overall performance score
+  session_pass_fail: "pass" | "fail"; // pass if score >= 60, fail otherwise
   performance_highlights: string[];
   areas_for_improvement: string[];
   corrections: Correction[];
@@ -493,6 +881,60 @@ interface LessonPlanItem {
   focus_area: string;
   practice_phrases: string[];  // Up to 5 phrases
 }
+```
+
+### Session Report (Box Upload Payload)
+
+The Session_Report is the comprehensive document uploaded to Box after the automatic post-session flow completes. It combines the full transcript with the Teacher Agent's analysis.
+
+```typescript
+interface SessionReport {
+  // Header
+  scenario_title: string;
+  session_date: string;
+  target_language: string;
+
+  // Score summary
+  session_score: number;
+  session_pass_fail: "pass" | "fail";
+
+  // Full transcript
+  transcript: TranscriptEntry[];
+
+  // Teacher Agent analysis
+  performance_highlights: string[];
+  areas_for_improvement: string[];
+  corrections: Correction[];
+  suggested_vocabulary: SuggestedPhrase[];
+  lesson_plan: LessonPlanItem[];
+}
+```
+
+### Achievement Tracking
+
+```typescript
+interface AchievementRecord {
+  id: string;                          // e.g., "first-session", "streak-3", "perfect-score"
+  label: string;                       // Display label
+  icon: string;                        // Icon identifier or emoji
+  earned_at: string;                   // ISO 8601 timestamp when first earned
+  session_id: string;                  // Session that triggered the achievement
+}
+
+interface AchievementState {
+  total_sessions: number;              // Lifetime session count
+  current_streak: number;              // Consecutive sessions (resets on gap > 48h)
+  last_session_date: string | null;    // ISO 8601, used for streak calculation
+  earned_badges: AchievementRecord[];  // All earned achievements
+}
+
+// Milestone definitions
+type MilestoneId =
+  | "first-session"      // First session completed
+  | "streak-3"           // 3 consecutive sessions
+  | "streak-5"           // 5 consecutive sessions
+  | "perfect-score"      // Session_Score of 100
+  | "ten-sessions";      // 10 total sessions completed
 ```
 
 ### WebSocket Message Protocol (Client ↔ FastAPI Server)
@@ -561,31 +1003,38 @@ from typing import Optional
 class FeedbackRequest(BaseModel):
     transcript: list[dict]  # [{role, text, timestamp}]
     target_language: str
+    source_language: str = "en"
     available_scenarios: list[dict]  # [{id, title}]
 
 # POST /feedback response
 class FeedbackResponse(BaseModel):
-    feedback: dict  # SessionFeedback structure
+    success: bool
+    feedback: dict | None = None  # SessionFeedback structure (includes session_score, session_pass_fail)
+    error: str | None = None
 
 # POST /scenarios/generate request
 class GenerateRequest(BaseModel):
     target_language: str
     proficiency_context: Optional[str] = None
+    destination: Optional[str] = None  # Optional city/region for TripAdvisor travel scenarios
 
 # POST /scenarios/generate response
 class GenerateResponse(BaseModel):
     scenarios: list[dict]
     success: bool
 
-# POST /transcripts/upload request
+# POST /transcripts/upload request — now includes feedback for Session_Report
 class UploadRequest(BaseModel):
     transcript: list[dict]
     session_date: str
     scenario_title: str
+    feedback: dict | None = None  # SessionFeedback (score, pass_fail, highlights, corrections, vocabulary, lesson_plan)
 
 # POST /transcripts/upload response
 class UploadResponse(BaseModel):
-    box_file_url: str
+    box_file_url: str | None = None
+    success: bool
+    error: str | None = None
 ```
 
 ## Correctness Properties
@@ -642,9 +1091,9 @@ class UploadResponse(BaseModel):
 
 ### Property 9: Feedback response structure validity
 
-*For any* SessionFeedback returned by the Teacher Agent, it SHALL contain all six required sections (performance highlights, areas for improvement, corrections, suggested vocabulary, suggested scenarios, lesson plan), with suggested scenarios count between 1 and 3 inclusive, and lesson plan items count between 1 and 5 inclusive where each item has a focus area and up to 5 practice phrases.
+*For any* SessionFeedback returned by the Teacher Agent, it SHALL contain all eight required sections (session_score, session_pass_fail, performance highlights, areas for improvement, corrections, suggested vocabulary, suggested scenarios, lesson plan), with session_score between 0 and 100 inclusive, session_pass_fail being exactly "pass" or "fail", suggested scenarios count between 1 and 3 inclusive, and lesson plan items count between 1 and 5 inclusive where each item has a focus area and up to 5 practice phrases.
 
-**Validates: Requirements 10.4, 10.6, 10.9, 10.11**
+**Validates: Requirements 10.4, 10.6, 10.9, 10.11, 10.20**
 
 ### Property 10: Feedback persistence round-trip
 
@@ -657,6 +1106,66 @@ class UploadResponse(BaseModel):
 *For any* SessionRecord in the transcript history, the "View in Box" link SHALL be displayed if and only if the record has an associated Box file URL, and the "View Feedback" option SHALL be available if and only if the record has associated SessionFeedback.
 
 **Validates: Requirements 8.5, 10.14**
+
+### Property 12: Travel scenarios incorporate real place names from scraped data
+
+*For any* set of valid TripAdvisor scraped items (with non-empty names and addresses), the generated Travel_Scenarios SHALL contain the real place names from the scraped data in both the scenario content (title or system_prompt) and the key_vocabulary list.
+
+**Validates: Requirements 11.4, 11.6**
+
+### Property 13: Travel scenario category coverage
+
+*For any* set of TripAdvisor scraped data containing at least one item in each of the three categories (attractions, restaurants, hotels), the generated Travel_Scenarios SHALL cover at least three distinct scenario categories (directions, ordering food, checking in).
+
+**Validates: Requirements 11.5**
+
+### Property 14: Travel scenario schema conformance with source field
+
+*For any* Travel_Scenario generated from TripAdvisor data, it SHALL conform to the Scenario JSON schema (non-empty id, title, description ≤150 chars, target_language, system_prompt) and SHALL have the source field set to "generated".
+
+**Validates: Requirements 11.7, 9.6**
+
+### Property 15: TripAdvisor content filtering excludes invalid entries
+
+*For any* set of raw TripAdvisor scraped items that includes entries marked as closed, entries with empty names, or entries with missing addresses, the filtering step SHALL exclude all such invalid entries from the transformation output, and the resulting scenarios SHALL only reference valid, open establishments.
+
+**Validates: Requirements 11.11**
+
+### Property 16: Session score range validity
+
+*For any* SessionFeedback produced by the Teacher Agent, the session_score SHALL be an integer between 0 and 100 inclusive.
+
+**Validates: Requirements 10.20**
+
+### Property 17: Pass/fail threshold consistency
+
+*For any* SessionFeedback produced by the Teacher Agent, the session_pass_fail field SHALL be "pass" if and only if session_score is greater than or equal to 60, and "fail" if and only if session_score is less than 60.
+
+**Validates: Requirements 10.21**
+
+### Property 18: Automatic post-session flow ordering
+
+*For any* session that ends, the post-session pipeline SHALL execute in strict order: (1) Teacher Agent evaluation completes and returns SessionFeedback, then (2) Box upload is initiated with the combined transcript and feedback as a Session_Report. The Box upload SHALL NOT begin before the Teacher Agent evaluation has completed successfully.
+
+**Validates: Requirements 10.1, 8.10**
+
+### Property 19: Session Report completeness
+
+*For any* Session_Report uploaded to Box, it SHALL contain the full transcript text (all entries with role, text, and timestamp) AND the complete Teacher Agent analysis (session_score, session_pass_fail, performance_highlights, areas_for_improvement, corrections, suggested_vocabulary, and lesson_plan).
+
+**Validates: Requirements 8.1, 8.2**
+
+### Property 20: Score color mapping correctness
+
+*For any* session_score value between 0 and 100, the displayed score color SHALL be green when score is 80 or above, yellow/amber when score is between 60 and 79 inclusive, and red when score is below 60.
+
+**Validates: Requirements 12.4, 12.5, 12.6**
+
+### Property 21: Achievement milestone detection correctness
+
+*For any* sequence of completed sessions with known scores and timestamps, the achievement system SHALL correctly detect and award: "first-session" on the first completed session, "streak-3" when 3 consecutive sessions occur (within 48h gaps), "streak-5" when 5 consecutive sessions occur, "perfect-score" when any session_score equals 100, and "ten-sessions" when total session count reaches 10. Each milestone SHALL be awarded at most once.
+
+**Validates: Requirements 12.10, 12.11**
 
 ## Error Handling
 
@@ -695,7 +1204,21 @@ class UploadResponse(BaseModel):
 - Box upload failures never cause transcript data loss
 - Teacher Agent failures never prevent transcript viewing
 - Scenario generation failures fall back to cached/preloaded scenarios silently
+- TripAdvisor scraper failures fall back to generic travel scenarios (never block scenario generation)
 - WebSocket disconnection preserves any transcript entries already received
+
+### TripAdvisor Scraper Errors
+
+| Error Condition | Handling Strategy |
+|----------------|-------------------|
+| Apify token not configured | Skip TripAdvisor scraping entirely, use fallback scenarios |
+| Apify actor run times out (>60s) | Abort scraping, fall back to generic travel scenarios for the target language |
+| Apify actor returns empty dataset | Fall back to generic travel scenarios without real destination data |
+| Apify actor returns HTTP error (4xx/5xx) | Log error, fall back to generic travel scenarios |
+| Apify rate limit exceeded (429) | Return fallback scenarios, log warning for monitoring |
+| Scraped data has no valid entries after filtering | Generate generic travel scenarios using destination name only |
+| Destination not recognized by TripAdvisor | Actor returns empty results, handled same as empty dataset |
+| Network timeout connecting to Apify API | Fall back to generic travel scenarios, return status "fallback" |
 
 ## Testing Strategy
 
@@ -703,13 +1226,21 @@ class UploadResponse(BaseModel):
 
 **Library**: [Hypothesis](https://hypothesis.readthedocs.io/) (Python backend) + [fast-check](https://fast-check.dev/) (TypeScript/React Native)
 
-Property-based tests will validate the 11 correctness properties defined above. Each test runs a minimum of 100 iterations with generated inputs.
+Property-based tests will validate the 21 correctness properties defined above. Each test runs a minimum of 100 iterations with generated inputs.
 
 **Backend (Python/Hypothesis)**:
 - Property 1: Generate random scenario data, validate schema conformance
 - Property 3: Generate random scenario/language pairs, verify system prompt construction includes both
 - Property 8: Generate random scenario lists with overlapping IDs, verify merge deduplication
-- Property 9: Generate random feedback structures, validate all sections present with correct cardinality
+- Property 9: Generate random feedback structures, validate all sections present with correct cardinality (including session_score 0-100 and session_pass_fail)
+- Property 12: Generate random TripAdvisor scraped items, verify output scenarios contain place names in content and key_vocabulary
+- Property 13: Generate random scraped data with items in all 3 categories, verify output covers at least 3 scenario types
+- Property 14: Generate random travel scenarios from scraped data, verify schema conformance and source="generated"
+- Property 15: Generate random scraped items including invalid entries (closed, missing name/address), verify filtering excludes them
+- Property 16: Generate random feedback responses, verify session_score is always in [0, 100]
+- Property 17: Generate random scores 0-100, verify pass_fail is "pass" iff score >= 60
+- Property 18: Simulate post-session flow with random transcripts, verify Teacher Agent evaluation completes before Box upload starts
+- Property 19: Generate random transcripts + feedback, verify Session_Report contains all required fields from both
 
 **Mobile (TypeScript/fast-check)**:
 - Property 2: Generate random strings, verify description length constraint
@@ -717,8 +1248,10 @@ Property-based tests will validate the 11 correctness properties defined above. 
 - Property 5: Generate random session records, verify persistence round-trip
 - Property 6: Generate random dated sessions, verify reverse chronological ordering
 - Property 7: Generate random sessions with various upload outcomes, verify local persistence
-- Property 10: Generate random feedback objects, verify persistence round-trip
+- Property 10: Generate random feedback objects (including score/pass_fail), verify persistence round-trip
 - Property 11: Generate random session records with/without URLs and feedback, verify conditional display logic
+- Property 20: Generate random scores 0-100, verify color mapping (green >= 80, yellow 60-79, red < 60)
+- Property 21: Generate random session histories (varying counts, scores, timestamps), verify correct milestone detection and at-most-once awarding
 
 **Tag format**: `Feature: voice-language-practice, Property {N}: {title}`
 
@@ -727,24 +1260,36 @@ Property-based tests will validate the 11 correctness properties defined above. 
 - System prompt builder (verify scenario + language inclusion)
 - Audio chunk encoding/decoding (PCM16 ↔ Float32 ↔ Base64)
 - Scenario merge logic edge cases (empty lists, all duplicates, no overlap)
-- Feedback response parsing and validation
+- Feedback response parsing and validation (including score/pass_fail fields)
 - WebSocket message serialization/deserialization
 - Ring buffer enqueue/dequeue logic
 - Barge-in buffer clearing
+- Score color mapping function (boundary values: 59, 60, 79, 80, 100)
+- Achievement milestone evaluation (each milestone condition individually)
+- Streak calculation with gap detection (48h threshold)
+- Session_Report formatting (verify transcript + feedback sections present in output)
+- Post-session flow state machine transitions (loading → feedback → uploading → complete)
 
 ### Integration Testing
 
 - End-to-end WebSocket session: connect → send init message → exchange audio → disconnect
 - BidiAgent with mocked Nova Sonic (verify tool dispatch works)
-- Box.com upload with mocked Box API
-- Apify actor invocation with mocked Apify responses
-- Teacher Agent invocation with mocked LLM responses
+- Box.com upload with mocked Box API (verify Session_Report includes transcript + feedback)
+- Apify TripAdvisor actor invocation with mocked Apify responses (verify correct actor ID, input params, and response parsing)
+- Apify actor invocation with mocked Apify responses (generic phrasebook scraping)
+- TripAdvisor scraper fallback behavior: mock Apify failure → verify generic scenarios returned
+- Teacher Agent invocation with mocked LLM responses (verify score/pass_fail in response)
 - FastAPI server startup and health check
+- Automatic post-session flow: mock Teacher Agent → verify Box upload receives combined transcript + feedback
+- Post-session flow error handling: mock Teacher Agent failure → verify Box upload is skipped
 
 ### End-to-End Testing
 
 - Full voice session flow: scenario selection → WebSocket connect → audio exchange → session end → transcript display
-- Feedback flow: session end → request feedback → display feedback → navigate to suggested scenario
+- Automatic post-session flow: session end → automatic Teacher Agent evaluation → score/pass_fail display → automatic Box upload → "View in Box" link appears
+- Gamified feedback display: verify score animation, color coding, pass/fail badge, and section colors render correctly
+- Achievement flow: complete sessions → verify badges appear with animation at correct milestones
+- Feedback flow: session end → automatic feedback → display feedback → navigate to suggested scenario
 - Offline resilience: start app offline → display cached scenarios → attempt session → show appropriate errors
 
 ### Manual Testing
@@ -756,4 +1301,9 @@ Property-based tests will validate the 11 correctness properties defined above. 
 - Audio pacing after tool calls (verify ring buffer handles bursts)
 - Hands-free operation (screen off, background audio)
 - Multi-language pronunciation recognition quality
+- Gamified UI animations: confetti on pass, encouraging animation on fail
+- Score count-up animation smoothness (1-2 second duration)
+- Achievement badge scale-up animation on first earn
+- Color-coded sections visual clarity and accessibility
+- Post-session flow timing: verify no user action needed between session end and feedback display
 

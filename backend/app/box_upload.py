@@ -26,6 +26,7 @@ class TranscriptUploadRequest(BaseModel):
     transcript: list[TranscriptEntry]
     session_date: str
     scenario_title: str
+    feedback: dict | None = None
 
 
 class TranscriptUploadResponse(BaseModel):
@@ -39,17 +40,131 @@ def _safe_filename(value: str) -> str:
     return cleaned[:80] or "transcript"
 
 
-def _format_transcript(request: TranscriptUploadRequest) -> bytes:
+def _format_session_report(request: TranscriptUploadRequest) -> bytes:
     lines = [
+        "=" * 60,
+        "SESSION REPORT",
+        "=" * 60,
+        "",
         f"Scenario: {request.scenario_title}",
         f"Session date: {request.session_date}",
         f"Uploaded at: {datetime.now(UTC).isoformat()}",
-        "",
     ]
+
+    # Score and pass/fail if feedback is available
+    if request.feedback:
+        score = request.feedback.get("session_score")
+        pass_fail = request.feedback.get("session_pass_fail")
+        if score is not None:
+            lines.append(f"Score: {score}/100")
+        if pass_fail is not None:
+            lines.append(f"Result: {pass_fail.upper()}")
+
+    lines.append("")
+    lines.append("-" * 60)
+    lines.append("TRANSCRIPT")
+    lines.append("-" * 60)
+    lines.append("")
+
     for entry in request.transcript:
         prefix = "Learner" if entry.role == "user" else "Assistant"
         timestamp = f" [{entry.timestamp}]" if entry.timestamp else ""
         lines.append(f"{prefix}{timestamp}: {entry.text}")
+
+    # Feedback sections
+    if request.feedback:
+        # Performance highlights
+        highlights = request.feedback.get("performance_highlights")
+        if highlights:
+            lines.append("")
+            lines.append("-" * 60)
+            lines.append("PERFORMANCE HIGHLIGHTS")
+            lines.append("-" * 60)
+            lines.append("")
+            if isinstance(highlights, list):
+                for item in highlights:
+                    lines.append(f"  • {item}")
+            else:
+                lines.append(f"  {highlights}")
+
+        # Areas for improvement
+        improvements = request.feedback.get("areas_for_improvement")
+        if improvements:
+            lines.append("")
+            lines.append("-" * 60)
+            lines.append("AREAS FOR IMPROVEMENT")
+            lines.append("-" * 60)
+            lines.append("")
+            if isinstance(improvements, list):
+                for item in improvements:
+                    lines.append(f"  • {item}")
+            else:
+                lines.append(f"  {improvements}")
+
+        # Corrections
+        corrections = request.feedback.get("corrections")
+        if corrections:
+            lines.append("")
+            lines.append("-" * 60)
+            lines.append("CORRECTIONS")
+            lines.append("-" * 60)
+            lines.append("")
+            if isinstance(corrections, list):
+                for correction in corrections:
+                    if isinstance(correction, dict):
+                        original = correction.get("original", "")
+                        corrected = correction.get("corrected", "")
+                        explanation = correction.get("explanation", "")
+                        lines.append(f"  ✗ {original}")
+                        lines.append(f"  ✓ {corrected}")
+                        if explanation:
+                            lines.append(f"    ({explanation})")
+                        lines.append("")
+                    else:
+                        lines.append(f"  • {correction}")
+
+        # Suggested vocabulary
+        vocabulary = request.feedback.get("suggested_vocabulary")
+        if vocabulary:
+            lines.append("")
+            lines.append("-" * 60)
+            lines.append("SUGGESTED VOCABULARY")
+            lines.append("-" * 60)
+            lines.append("")
+            if isinstance(vocabulary, list):
+                for item in vocabulary:
+                    if isinstance(item, dict):
+                        phrase = item.get("phrase", "")
+                        translation = item.get("translation", "")
+                        lines.append(f"  • {phrase} — {translation}")
+                    else:
+                        lines.append(f"  • {item}")
+            else:
+                lines.append(f"  {vocabulary}")
+
+        # Lesson plan
+        lesson_plan = request.feedback.get("lesson_plan")
+        if lesson_plan:
+            lines.append("")
+            lines.append("-" * 60)
+            lines.append("LESSON PLAN")
+            lines.append("-" * 60)
+            lines.append("")
+            if isinstance(lesson_plan, list):
+                for i, item in enumerate(lesson_plan, 1):
+                    if isinstance(item, dict):
+                        focus = item.get("focus_area", "")
+                        lines.append(f"  {i}. {focus}")
+                        phrases = item.get("practice_phrases", [])
+                        for phrase in phrases:
+                            lines.append(f"     - {phrase}")
+                    else:
+                        lines.append(f"  {i}. {item}")
+            else:
+                lines.append(f"  {lesson_plan}")
+
+    lines.append("")
+    lines.append("=" * 60)
     return "\n".join(lines).encode("utf-8")
 
 
@@ -76,7 +191,7 @@ async def upload_transcript(request: TranscriptUploadRequest) -> TranscriptUploa
 
     filename = f"{_safe_filename(request.session_date)}-{_safe_filename(request.scenario_title)}.txt"
     boundary = f"----langhack-{datetime.now(UTC).timestamp()}"
-    body = _multipart_body(filename, settings.box_folder_id, _format_transcript(request), boundary)
+    body = _multipart_body(filename, settings.box_folder_id, _format_session_report(request), boundary)
     upload_request = urllib.request.Request(
         "https://upload.box.com/api/2.0/files/content",
         data=body,

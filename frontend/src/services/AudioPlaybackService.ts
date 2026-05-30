@@ -8,6 +8,10 @@
 export class AudioPlaybackService {
   private audioContext: AudioContext | null = null;
   private workletNode: AudioWorkletNode | null = null;
+  private fallbackNode: ScriptProcessorNode | null = null;
+  private fallbackBuffer: Float32Array = new Float32Array(24000 * 60);
+  private fallbackWritePos = 0;
+  private fallbackReadPos = 0;
   private _isPlaying = false;
 
   get isPlaying(): boolean {
@@ -22,17 +26,30 @@ export class AudioPlaybackService {
       return;
     }
 
+    const AudioContextConstructor =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) {
+      throw new Error('Audio playback is not supported in this browser.');
+    }
+
     // Create 24kHz AudioContext for playback
-    this.audioContext = new AudioContext({ sampleRate: 24000 });
+    const audioContext = new AudioContextConstructor({ sampleRate: 24000 });
+    this.audioContext = audioContext;
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
 
-    // Load the AudioWorklet processor module
-    await this.audioContext.audioWorklet.addModule(
-      new URL('./audio-player-processor.js', import.meta.url).href
-    );
-
-    // Create the worklet node and connect to output
-    this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-player-processor');
-    this.workletNode.connect(this.audioContext.destination);
+    try {
+      if (!audioContext.audioWorklet || !window.AudioWorkletNode) {
+        throw new Error('AudioWorklet playback is not supported in this browser.');
+      }
+      await audioContext.audioWorklet.addModule('/audio-player-processor.js');
+      this.workletNode = new window.AudioWorkletNode(audioContext, 'audio-player-processor');
+      this.workletNode.connect(audioContext.destination);
+    } catch {
+      this.startFallbackPlayback(audioContext);
+    }
 
     this._isPlaying = true;
   }
@@ -42,12 +59,16 @@ export class AudioPlaybackService {
    * @param base64Pcm16 - base64-encoded PCM16 mono 24kHz audio
    */
   enqueueAudio(base64Pcm16: string): void {
-    if (!this.workletNode || !this._isPlaying) {
+    if ((!this.workletNode && !this.fallbackNode) || !this._isPlaying) {
       return;
     }
 
     const samples = this.pcm16Base64ToFloat32(base64Pcm16);
-    this.workletNode.port.postMessage({ type: 'audio', samples });
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: 'audio', samples });
+    } else if (this.fallbackNode) {
+      this.enqueueFallback(samples);
+    }
   }
 
   /**
@@ -55,11 +76,14 @@ export class AudioPlaybackService {
    * Called when the user interrupts the AI's response.
    */
   clearBuffer(): void {
-    if (!this.workletNode || !this._isPlaying) {
+    if (!this.workletNode && !this.fallbackNode) {
       return;
     }
 
-    this.workletNode.port.postMessage({ type: 'barge-in' });
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: 'barge-in' });
+    }
+    this.fallbackReadPos = this.fallbackWritePos;
   }
 
   /**
@@ -71,6 +95,12 @@ export class AudioPlaybackService {
     if (this.workletNode) {
       this.workletNode.disconnect();
       this.workletNode = null;
+    }
+
+    if (this.fallbackNode) {
+      this.fallbackNode.disconnect();
+      this.fallbackNode.onaudioprocess = null;
+      this.fallbackNode = null;
     }
 
     if (this.audioContext) {
@@ -96,5 +126,33 @@ export class AudioPlaybackService {
     }
 
     return float32;
+  }
+
+  private startFallbackPlayback(audioContext: AudioContext): void {
+    this.fallbackReadPos = 0;
+    this.fallbackWritePos = 0;
+    this.fallbackBuffer.fill(0);
+
+    const node = audioContext.createScriptProcessor(4096, 0, 1);
+    node.onaudioprocess = (event) => {
+      const output = event.outputBuffer.getChannelData(0);
+      for (let i = 0; i < output.length; i++) {
+        if (this.fallbackReadPos < this.fallbackWritePos) {
+          output[i] = this.fallbackBuffer[this.fallbackReadPos % this.fallbackBuffer.length];
+          this.fallbackReadPos++;
+        } else {
+          output[i] = 0;
+        }
+      }
+    };
+    node.connect(audioContext.destination);
+    this.fallbackNode = node;
+  }
+
+  private enqueueFallback(samples: Float32Array): void {
+    for (let i = 0; i < samples.length; i++) {
+      this.fallbackBuffer[this.fallbackWritePos % this.fallbackBuffer.length] = samples[i];
+      this.fallbackWritePos++;
+    }
   }
 }

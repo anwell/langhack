@@ -38,7 +38,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Include scenario context, target language, conversation rules, implicit correction behavior, and voice style directives
     - _Requirements: 2.3, 6.3_
 
-  - [ ]* 1.5 Write property tests for system prompt builder
+  - [x] 1.5 Write property tests for system prompt builder
     - **Property 3: System prompt includes scenario and language**
     - **Validates: Requirements 2.3, 6.3**
 
@@ -69,7 +69,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Keep screen awake during session
     - _Requirements: 2.2, 2.4, 2.6, 3.1, 3.2, 3.4, 3.5, 3.6, 4.1, 4.2, 5.1, 5.3_
 
-  - [ ]* 2.4 Write property tests for transcript entry validation
+  - [x] 2.4 Write property tests for transcript entry validation
     - **Property 4: Transcript entries have valid speaker labels**
     - **Validates: Requirements 4.2**
 
@@ -105,7 +105,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Add "Generate new scenarios" button that calls `/scenarios/generate`
     - _Requirements: 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 9.9, 9.10, 9.12_
 
-  - [ ]* 4.4 Write property tests for scenario validation and merge
+  - [x] 4.4 Write property tests for scenario validation and merge
     - **Property 1: Scenario schema conformance**
     - **Property 2: Scenario description length constraint**
     - **Property 8: Scenario merge deduplication**
@@ -129,7 +129,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Show "View Feedback" option if `feedback` exists
     - _Requirements: 4.4, 8.5, 8.6_
 
-  - [ ]* 5.3 Write property tests for session persistence
+  - [x] 5.3 Write property tests for session persistence
     - **Property 5: Session record persistence round-trip**
     - **Property 6: Transcript history reverse chronological ordering**
     - **Property 7: Local transcript persistence invariant**
@@ -159,7 +159,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Handle feedback unavailable: show message + retry option
     - _Requirements: 10.1, 10.2, 10.13, 10.14, 10.15, 10.16, 10.18, 10.19_
 
-  - [ ]* 7.3 Write property tests for feedback validation and persistence
+  - [x] 7.3 Write property tests for feedback validation and persistence
     - **Property 9: Feedback response structure validity**
     - **Property 10: Feedback persistence round-trip**
     - **Validates: Requirements 10.4, 10.6, 10.9, 10.11, 10.13**
@@ -205,9 +205,197 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Wire all screens together
     - _Requirements: 1.2, 4.4_
 
-- [ ] 11. Final checkpoint - Full MVP integration
+- [x] 11. TripAdvisor scraping for travel scenarios
+  - [x] 11.1 Add httpx dependency to requirements.txt
+    - Add `httpx` to `backend/requirements.txt`
+    - Verify installation with `pip install -r requirements.txt`
+    - _Requirements: 11.1, 11.3_
+
+  - [x] 11.2 Implement TripAdvisor scraper invocation function
+    - Create `invoke_tripadvisor_scraper()` async function in `backend/app/scenario_agent.py`
+    - Use `httpx.AsyncClient` with 60s timeout to call Apify REST API
+    - POST to `https://api.apify.com/v2/acts/maxcopell~tripadvisor/runs` with actor input (query, maxItemsPerQuery=20, includeAttractions, includeRestaurants, includeHotels, language)
+    - Poll or use `waitForFinish` param to get dataset items from `https://api.apify.com/v2/actor-runs/{run_id}/dataset/items`
+    - Read Apify token from `get_settings().apify_token`
+    - Return list of raw scraped item dicts on success, empty list on failure
+    - _Requirements: 11.1, 11.3, 11.12_
+
+  - [x] 11.3 Implement filtering and transformation logic
+    - Add `DEFAULT_DESTINATIONS` dict mapping language codes to cities (es→Barcelona, fr→Paris, de→Berlin, it→Rome, pt→Lisbon, ja→Tokyo, ko→Seoul, zh→Beijing)
+    - Add `SCENARIO_TEMPLATES` dict with title/description/prompt templates for ATTRACTION, RESTAURANT, and HOTEL types
+    - Implement `filter_scraped_items(items)` — exclude closed establishments, entries missing name/address, and entries with invalid type
+    - Implement `transform_to_scenarios(items, destination, target_language)` — map filtered items to `Scenario` objects using templates, truncate description to 150 chars, build key_vocabulary from template base + scraped content
+    - _Requirements: 11.4, 11.5, 11.6, 11.7, 11.11_
+
+  - [x] 11.4 Update generate endpoint to use TripAdvisor when destination is provided
+    - Add `destination: str | None = None` field to `ScenarioGenerationRequest` model
+    - Update `generate_scenarios()` endpoint logic: if destination is provided (or default destination exists for target_language), call `invoke_tripadvisor_scraper()`
+    - If scraper returns results, filter and transform them into Travel_Scenarios
+    - If no destination and no default for language, skip scraping and use existing fallback
+    - Set response status to "generated" when TripAdvisor scenarios are produced
+    - _Requirements: 11.1, 11.2, 11.9_
+
+  - [x] 11.5 Implement fallback handling for scraper failures
+    - If `invoke_tripadvisor_scraper()` raises an exception or returns empty list, fall back to `_fallback_scenarios()`
+    - Log warning on scraper failure (do not expose error to client)
+    - Ensure response still returns `success: True` with fallback scenarios and status "fallback"
+    - _Requirements: 11.8_
+
+  - [x] 11.6 Add destination input to frontend scenario generation UI
+    - In `frontend/src/screens/ScenarioListScreen.tsx`, add an optional text input field for destination city above the "Generate new scenarios" button
+    - Add placeholder text: "Enter a destination city (optional)"
+    - Pass destination value to ApiService when generating scenarios
+    - _Requirements: 11.10_
+
+  - [x] 11.7 Update ApiService to pass destination parameter
+    - In `frontend/src/services/ApiService.ts`, update the `generateScenarios()` method to accept an optional `destination` parameter
+    - Include `destination` in the POST body to `/scenarios/generate` when provided
+    - _Requirements: 11.9, 11.10_
+
+  - [x] 11.8 Write property test for TripAdvisor filter logic
+    - **Property 12: Scraped item filtering correctness**
+    - Test that `filter_scraped_items()` excludes items where `isClosed=True`, items missing `name` or `address`, and items with invalid `type`
+    - Test that valid items (open, with name+address, valid type) are always retained
+    - **Validates: Requirements 11.11**
+
+  - [x] 11.9 Write property test for scenario transformation
+    - **Property 13: Travel scenario schema conformance**
+    - Test that `transform_to_scenarios()` produces Scenario objects with non-empty id, title, description (≤150 chars), target_language, key_vocabulary, system_prompt, and source="generated"
+    - **Validates: Requirements 11.4, 11.6, 11.7**
+
+  - [x] 11.10 Write property test for default destination selection
+    - **Property 14: Default destination mapping completeness**
+    - Test that for every language in `DEFAULT_DESTINATIONS`, the mapped city is a non-empty string
+    - Test that unknown languages return None (no KeyError)
+    - **Validates: Requirements 11.2**
+
+  - [x] 11.11 Write property test for category coverage
+    - **Property 15: Category coverage in generated scenarios**
+    - Test that when scraped items contain at least one item per category (ATTRACTION, RESTAURANT, HOTEL), the output scenarios cover all three categories
+    - **Validates: Requirements 11.5**
+
+- [x] 12. Checkpoint - TripAdvisor integration verified
   - Ensure all tests pass, ask the user if questions arise.
-  - Full flow: select language → browse scenarios → start voice session → live transcript → end session → view feedback → upload to Box → view in history.
+  - At this point you should be able to: enter a destination city, generate travel scenarios from TripAdvisor data, and see real place names in scenario titles.
+
+- [x] 13. Scoring, automatic post-session flow, and enhanced Box upload
+  - [x] 13.1 Update Teacher Agent to return session_score and session_pass_fail
+    - Add `session_score: int = Field(ge=0, le=100)` to `SessionFeedback` model in `backend/app/teacher_agent.py`
+    - Add `session_pass_fail: str` field (literal "pass" or "fail") to `SessionFeedback`
+    - Update `build_feedback()` to compute a score (deterministic placeholder: count user turns × 10, capped at 100) and derive pass_fail from score >= 60
+    - Add `session_score` and `session_pass_fail` to `FeedbackResponse` model
+    - _Requirements: 10.20, 10.21, 10.12_
+
+  - [x] 13.2 Update FeedbackRequest/FeedbackResponse models for score fields
+    - Ensure `FeedbackResponse.feedback` includes `session_score` and `session_pass_fail` in the JSON output
+    - Update `frontend/src/types/index.ts` `SessionFeedback` interface to add `session_score: number` and `session_pass_fail: "pass" | "fail"`
+    - Update `frontend/src/services/ApiService.ts` `requestFeedback()` to parse the new fields from the response
+    - _Requirements: 10.12, 10.13, 10.14_
+
+  - [x] 13.3 Update PostSessionScreen to automatically trigger feedback on session end
+    - In `frontend/src/screens/PostSessionScreen.tsx`, remove the manual "Request teacher feedback" button
+    - Call `getFeedback()` automatically in a `useEffect` on mount (when transcript is non-empty)
+    - Display a loading animation (progress indicator with "Analyzing your session..." text) while waiting for Teacher Agent response
+    - _Requirements: 10.1, 10.22, 12.14_
+
+  - [x] 13.4 Update PostSessionScreen to automatically trigger Box upload after feedback
+    - After feedback is received and persisted, automatically call the Box upload with combined transcript + feedback data
+    - Pass the `feedback` object (including score, pass_fail, highlights, corrections, vocabulary, lesson_plan) to the upload request
+    - Show loading state during upload, then display "View in Box" link on success
+    - If feedback fails, skip Box upload and show retry option for feedback only
+    - _Requirements: 8.1, 8.10, 10.1_
+
+  - [x] 13.5 Update Box upload endpoint to accept and format Session_Report
+    - In `backend/app/box_upload.py`, add optional `feedback: dict | None = None` field to `TranscriptUploadRequest`
+    - Update `_format_transcript()` (rename to `_format_session_report()`) to include: scenario title, session date, session_score, session_pass_fail, full transcript, performance highlights, areas for improvement, corrections, suggested vocabulary, and lesson_plan
+    - Format the report as a readable text document with clear section headers
+    - _Requirements: 8.1, 8.2_
+
+  - [x] 13.6 Update ApiService to pass feedback in upload request
+    - In `frontend/src/services/ApiService.ts`, update `uploadTranscript()` to accept an optional `feedback` parameter
+    - Include `feedback` in the POST body to `/transcripts/upload` when provided
+    - _Requirements: 8.1, 8.10_
+
+  - [x] 13.7 Write property test for score range validity
+    - **Property 16: Session score range validity**
+    - Test that `build_feedback()` always returns `session_score` in [0, 100] for any valid transcript input
+    - **Validates: Requirements 10.20**
+
+  - [x] 13.8 Write property test for pass/fail threshold consistency
+    - **Property 17: Pass/fail threshold consistency**
+    - Test that for any `session_score`, `session_pass_fail` is "pass" iff score >= 60, "fail" iff score < 60
+    - **Validates: Requirements 10.21**
+
+  - [x] 13.9 Write property test for automatic flow ordering
+    - **Property 18: Automatic post-session flow ordering**
+    - Test that the post-session pipeline executes Teacher Agent evaluation before Box upload (feedback must be available before upload is called)
+    - **Validates: Requirements 10.1, 8.10**
+
+  - [x] 13.10 Write property test for Session Report completeness
+    - **Property 19: Session Report completeness**
+    - Test that `_format_session_report()` output contains all required fields: transcript entries, session_score, session_pass_fail, performance_highlights, corrections, suggested_vocabulary, and lesson_plan
+    - **Validates: Requirements 8.1, 8.2**
+
+- [x] 14. Gamified post-session review UI
+  - [x] 14.1 Install animation dependencies
+    - Add `react-native-reanimated` and `lottie-react-native` to `frontend/package.json`
+    - Update `frontend/babel.config.js` to include `react-native-reanimated/plugin`
+    - Verify installation with `npx expo start` (no build errors)
+    - _Requirements: 12.3, 12.1, 12.2_
+
+  - [x] 14.2 Implement score count-up animation and color-coded display
+    - In `PostSessionScreen`, add animated score display that counts from 0 to `session_score` over 1-2 seconds using `withTiming` from react-native-reanimated
+    - Implement `getScoreColor(score)`: green (#16a34a) for >= 80, yellow/amber (#d97706) for 60-79, red (#dc2626) for < 60
+    - Display score prominently with the computed color
+    - _Requirements: 12.3, 12.4, 12.5, 12.6_
+
+  - [x] 14.3 Implement pass/fail badge with animations
+    - Display `session_pass_fail` as a large, visually prominent badge/banner at the top of the feedback section
+    - On "pass": trigger confetti/sparkles animation (Lottie or particle effect) lasting 2-3 seconds
+    - On "fail": trigger encouraging pulse animation with motivational message ("Keep going! You're improving!")
+    - Badge appears before the score display
+    - _Requirements: 12.1, 12.2, 12.13_
+
+  - [x] 14.4 Implement color-coded feedback sections
+    - Performance highlights section: green background tint (#dcfce7)
+    - Corrections section: red background tint (#fee2e2)
+    - Suggested vocabulary section: blue background tint (#dbeafe)
+    - Areas for improvement: amber background tint (#fef3c7)
+    - _Requirements: 12.7, 12.8, 12.9_
+
+  - [x] 14.5 Implement Achievement Service with milestone tracking
+    - Create `frontend/src/services/AchievementService.ts`
+    - Define `AchievementState` and `AchievementRecord` interfaces
+    - Implement `loadAchievementState()` — read from AsyncStorage key `@langhack/achievements`
+    - Implement `evaluateAchievements(sessionScore, state)` — check milestone conditions: first-session, streak-3, streak-5, perfect-score, ten-sessions
+    - Implement `updateAchievementState(sessionScore)` — increment total_sessions, update streak (reset if gap > 48h), evaluate milestones, persist updated state
+    - Streak logic: compare current time to `last_session_date`; if gap > 48 hours, reset `current_streak` to 1; otherwise increment
+    - _Requirements: 12.10, 12.11_
+
+  - [x] 14.6 Implement achievement badge display with entrance animation
+    - In `PostSessionScreen`, after feedback is displayed, call `updateAchievementState(session_score)`
+    - If new badges are earned, display each `AchievementRecord` with icon and label
+    - Each badge appears with a scale-up entrance animation using `withSpring({ damping: 8 })`
+    - _Requirements: 12.10, 12.12_
+
+  - [x] 14.7 Write property test for score color mapping
+    - **Property 20: Score color mapping correctness**
+    - Test that for any score 0-100: green if >= 80, yellow/amber if 60-79, red if < 60
+    - **Validates: Requirements 12.4, 12.5, 12.6**
+
+  - [x] 14.8 Write property test for achievement milestone detection
+    - **Property 21: Achievement milestone detection correctness**
+    - Test that `evaluateAchievements()` correctly detects: first-session on first session, streak-3 at 3 consecutive, streak-5 at 5 consecutive, perfect-score at score=100, ten-sessions at total=10
+    - Test that each milestone is awarded at most once
+    - **Validates: Requirements 12.10, 12.11**
+
+- [x] 15. Checkpoint - Scoring and gamification verified
+  - Ensure all tests pass, ask the user if questions arise.
+  - At this point you should be able to: end a session → see loading animation → receive score + pass/fail automatically → see confetti/pulse animation → see color-coded feedback → see achievement badges → Box upload happens automatically with full Session_Report.
+
+- [x] 16. Final checkpoint - Full MVP integration
+  - Ensure all tests pass, ask the user if questions arise.
+  - Full flow: select language → browse scenarios → start voice session → live transcript → end session → automatic feedback with score/pass_fail → gamified review (animations, colors, badges) → automatic Box upload with Session_Report → view in history. Additionally: enter a destination → generate TripAdvisor-based travel scenarios → practice with real place names.
 
 ## Notes
 
@@ -219,6 +407,8 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
 - The BidiAgent reference implementation (https://github.com/RDarrylR/serverless-family-recipes-bidirectional-nova-sonic) provides the pattern for task 1.2
 - Backend runs on persistent compute (local or EC2/ECS), NOT Lambda, due to WebSocket requirements for Nova Sonic
 - The requirements mention Lambda/API Gateway (Req 7) but the design explicitly overrides this for the voice WebSocket — REST endpoints could still be deployed to Lambda separately if desired
+- Tasks 13.x UPDATE existing implementations (7.1, 7.2, 8.1, 8.2) to add scoring, automatic flow, and enhanced Box upload
+- Tasks 14.x add NEW gamified UI features on top of the updated PostSessionScreen
 
 ## Task Dependency Graph
 
@@ -232,7 +422,16 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     { "id": 4, "tasks": ["4.2", "4.3", "5.2", "5.3"] },
     { "id": 5, "tasks": ["4.4", "7.1", "8.1", "9.1"] },
     { "id": 6, "tasks": ["7.2", "7.3", "8.2", "9.2"] },
-    { "id": 7, "tasks": ["10.1"] }
+    { "id": 7, "tasks": ["10.1", "11.1"] },
+    { "id": 8, "tasks": ["11.2", "11.3"] },
+    { "id": 9, "tasks": ["11.4", "11.5", "11.6", "11.7"] },
+    { "id": 10, "tasks": ["11.8", "11.9", "11.10", "11.11"] },
+    { "id": 11, "tasks": ["13.1", "13.2"] },
+    { "id": 12, "tasks": ["13.3", "13.5", "13.6"] },
+    { "id": 13, "tasks": ["13.4", "13.7", "13.8", "13.10"] },
+    { "id": 14, "tasks": ["13.9", "14.1"] },
+    { "id": 15, "tasks": ["14.2", "14.3", "14.4", "14.5"] },
+    { "id": 16, "tasks": ["14.6", "14.7", "14.8"] }
   ]
 }
 ```

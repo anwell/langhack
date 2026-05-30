@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
@@ -51,6 +53,8 @@ class LessonPlanItem(BaseModel):
 
 
 class SessionFeedback(BaseModel):
+    session_score: int = Field(ge=0, le=100)
+    session_pass_fail: Literal["pass", "fail"]
     performance_highlights: list[str]
     areas_for_improvement: list[str]
     corrections: list[Correction]
@@ -69,6 +73,8 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     success: bool
     feedback: SessionFeedback | None = None
+    session_score: int | None = None
+    session_pass_fail: Literal["pass", "fail"] | None = None
     error: str | None = None
 
 
@@ -87,6 +93,10 @@ def build_feedback(request: FeedbackRequest) -> SessionFeedback:
     if not user_turns:
         raise ValueError("Transcript must include at least one user utterance")
 
+    # Deterministic placeholder scoring: count user turns × 10, capped at 100
+    session_score = min(len(user_turns) * 10, 100)
+    session_pass_fail: Literal["pass", "fail"] = "pass" if session_score >= 60 else "fail"
+
     scenario = request.available_scenarios[0] if request.available_scenarios else None
     suggested = SuggestedScenario(
         id=scenario.id if scenario else None,
@@ -99,6 +109,8 @@ def build_feedback(request: FeedbackRequest) -> SessionFeedback:
 
     shortest = min(user_turns, key=len)
     return SessionFeedback(
+        session_score=session_score,
+        session_pass_fail=session_pass_fail,
         performance_highlights=[
             "You completed multiple turns in the target conversation.",
             "You responded to the partner instead of relying only on isolated words.",
@@ -153,7 +165,13 @@ def build_feedback(request: FeedbackRequest) -> SessionFeedback:
 async def create_feedback(request: FeedbackRequest) -> FeedbackResponse:
     """Evaluate a completed session transcript and return structured feedback."""
     try:
-        return FeedbackResponse(success=True, feedback=build_feedback(request))
+        feedback = build_feedback(request)
+        return FeedbackResponse(
+            success=True,
+            feedback=feedback,
+            session_score=feedback.session_score,
+            session_pass_fail=feedback.session_pass_fail,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

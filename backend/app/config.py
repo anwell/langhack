@@ -12,6 +12,9 @@ from pydantic import BaseModel
 
 load_dotenv()
 
+if os.getenv("AWS_PROFILE", "") == "":
+    os.environ.pop("AWS_PROFILE", None)
+
 
 class Settings(BaseModel):
     """Application settings loaded from environment variables."""

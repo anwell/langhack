@@ -54,6 +54,8 @@ export interface SessionRecord {
  * Structured feedback from the Teacher Agent after a session.
  */
 export interface SessionFeedback {
+  session_score: number;
+  session_pass_fail: "pass" | "fail";
   performance_highlights: string[];
   areas_for_improvement: string[];
   corrections: Correction[];

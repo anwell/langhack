@@ -28,15 +28,20 @@ export async function fetchScenarios(targetLanguage?: string): Promise<Scenario[
 export async function generateScenarios(
   targetLanguage: string,
   sourceLanguage: string,
-  proficiency?: string
+  proficiency?: string,
+  destination?: string
 ): Promise<Scenario[]> {
+  const body: Record<string, string | undefined> = {
+    target_language: targetLanguage,
+    source_language: sourceLanguage,
+    proficiency,
+  };
+  if (destination) {
+    body.destination = destination;
+  }
   const payload = await requestJson<{ success: boolean; scenarios: Scenario[] }>('/scenarios/generate', {
     method: 'POST',
-    body: JSON.stringify({
-      target_language: targetLanguage,
-      source_language: sourceLanguage,
-      proficiency,
-    }),
+    body: JSON.stringify(body),
   });
   return payload.success ? payload.scenarios : [];
 }
@@ -61,6 +66,7 @@ export async function uploadTranscript(input: {
   transcript: TranscriptEntry[];
   session_date: string;
   scenario_title: string;
+  feedback?: SessionFeedback;
 }): Promise<string> {
   const payload = await requestJson<{ success: boolean; box_file_url?: string; error?: string }>(
     '/transcripts/upload',

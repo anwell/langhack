@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Scenario } from '../types';
 import { cacheScenarios, getCachedScenarios, getLanguageSettings } from '../services/StorageService';
 import { fetchScenarios, generateScenarios } from '../services/ApiService';
@@ -14,6 +15,7 @@ export function ScenarioListScreen({ navigation }: Props) {
   const [targetLanguage, setTargetLanguage] = useState('es');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [destination, setDestination] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,9 +38,11 @@ export function ScenarioListScreen({ navigation }: Props) {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const startScenario = (scenario: Scenario) => {
     navigation?.navigate('Session', {
@@ -53,7 +57,8 @@ export function ScenarioListScreen({ navigation }: Props) {
     setGenerating(true);
     try {
       const settings = await getLanguageSettings();
-      const generated = await generateScenarios(settings.target_language, settings.source_language);
+      const trimmedDestination = destination.trim() || undefined;
+      const generated = await generateScenarios(settings.target_language, settings.source_language, undefined, trimmedDestination);
       await cacheScenarios(generated);
       const merged = await getCachedScenarios();
       setScenarios(merged.filter((scenario) => scenario.target_language === settings.target_language));
@@ -78,6 +83,15 @@ export function ScenarioListScreen({ navigation }: Props) {
       <View style={styles.header}>
         <Text style={styles.title}>Practice scenarios</Text>
         <Text style={styles.subtitle}>Target language: {targetLanguage}</Text>
+        <TextInput
+          style={styles.destinationInput}
+          placeholder="Enter a destination city (optional)"
+          placeholderTextColor="#9ca3af"
+          value={destination}
+          onChangeText={setDestination}
+          autoCapitalize="words"
+          returnKeyType="done"
+        />
         <TouchableOpacity style={styles.generateButton} onPress={addGenerated} disabled={generating}>
           <Text style={styles.generateText}>{generating ? 'Generating...' : 'Generate more'}</Text>
         </TouchableOpacity>
@@ -106,6 +120,7 @@ const styles = StyleSheet.create({
   header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
   title: { fontSize: 28, fontWeight: '700', color: '#111827' },
   subtitle: { marginTop: 4, color: '#6b7280' },
+  destinationInput: { marginTop: 12, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, fontSize: 16, color: '#111827', backgroundColor: '#f9fafb' },
   generateButton: { marginTop: 12, alignSelf: 'flex-start', borderRadius: 10, backgroundColor: '#2563eb', paddingVertical: 10, paddingHorizontal: 14 },
   generateText: { color: '#fff', fontWeight: '700' },
   card: { marginHorizontal: 16, marginTop: 14, borderRadius: 16, backgroundColor: '#fff', padding: 18, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
