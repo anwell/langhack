@@ -4,8 +4,11 @@ Provides the /ws WebSocket endpoint that creates a per-connection BidiAgent
 backed by Amazon Nova Sonic v2 for bidirectional voice streaming.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from strands.experimental.bidi.tools import stop_conversation
+from strands.experimental.bidi.types.events import BidiAudioInputEvent
 
 from app.config import get_settings
 from app.prompts import build_conversation_prompt
@@ -37,6 +40,71 @@ def create_bidi_agent(system_prompt: str):
     )
 
 
+def client_message_to_bidi_event(message: dict[str, Any]) -> BidiAudioInputEvent:
+    """Convert frontend WebSocket audio messages into Strands Bidi input events."""
+    if message.get("type") != "audio" or not isinstance(message.get("data"), str):
+        raise ValueError("Expected an audio message with base64 PCM data.")
+
+    return BidiAudioInputEvent(
+        audio=message["data"],
+        format="pcm",
+        sample_rate=16000,
+        channels=1,
+    )
+
+
+def bidi_event_to_client_message(event: dict[str, Any]) -> dict[str, Any] | None:
+    """Convert Strands Bidi output events into the frontend WebSocket protocol."""
+    event_type = event.get("type")
+
+    if event_type == "bidi_audio_stream" and isinstance(event.get("audio"), str):
+        return {"type": "audio", "data": event["audio"]}
+
+    if event_type == "bidi_transcript_stream":
+        return {
+            "type": "transcript",
+            "role": event.get("role", "assistant"),
+            "text": event.get("text", ""),
+            "is_final": bool(event.get("is_final", False)),
+        }
+
+    if event_type == "bidi_interruption":
+        return {"type": "barge-in"}
+
+    if event_type == "bidi_connection_close":
+        return {"type": "session_ended", "transcript": []}
+
+    if event_type == "bidi_error":
+        return {
+            "type": "error",
+            "message": "Voice session failed. Check backend AWS Bedrock configuration and logs.",
+            "code": event.get("code", "BidiError"),
+        }
+
+    # Connection start/restart, response lifecycle, usage, and tool events are not
+    # rendered by the current frontend protocol.
+    return None
+
+
+async def receive_client_bidi_input(ws: WebSocket) -> BidiAudioInputEvent:
+    """Read and translate one frontend WebSocket message for the BidiAgent."""
+    while True:
+        message = await ws.receive_json()
+        try:
+            return client_message_to_bidi_event(message)
+        except ValueError:
+            # Ignore non-audio control/heartbeat messages instead of tearing down
+            # the voice stream.
+            continue
+
+
+async def send_client_bidi_output(ws: WebSocket, event: dict[str, Any]) -> None:
+    """Translate one BidiAgent event and send it to the frontend if supported."""
+    message = bidi_event_to_client_message(event)
+    if message is not None:
+        await ws.send_json(message)
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     """Real-time voice session via BidiAgent.
@@ -48,24 +116,37 @@ async def websocket_endpoint(ws: WebSocket):
     Protocol:
         1. Client connects via WebSocket
         2. Client sends initial JSON: {scenario_context, target_language, scenario_id}
-        3. BidiAgent streams audio bidirectionally until session ends
-        4. Connection closes on disconnect or stop_conversation tool call
+        3. Backend translates client audio messages to Strands Bidi events
+        4. Backend translates Strands Bidi events back to the frontend protocol
+        5. Connection closes on disconnect or stop_conversation tool call
     """
     await ws.accept()
-
-    init_msg = await ws.receive_json()
-    scenario_context = init_msg.get("scenario_context", "")
-    target_language = init_msg.get("target_language", "")
-
-    system_prompt = build_conversation_prompt(scenario_context, target_language)
-    agent = create_bidi_agent(system_prompt)
+    agent = None
 
     try:
+        init_msg = await ws.receive_json()
+        scenario_context = init_msg.get("scenario_context", "")
+        target_language = init_msg.get("target_language", "")
+
+        system_prompt = build_conversation_prompt(scenario_context, target_language)
+        agent = create_bidi_agent(system_prompt)
+
         await agent.run(
-            inputs=[ws.receive_json],
-            outputs=[ws.send_json],
+            inputs=[lambda: receive_client_bidi_input(ws)],
+            outputs=[lambda event: send_client_bidi_output(ws, event)],
         )
     except WebSocketDisconnect:
         pass
+    except Exception:
+        try:
+            await ws.send_json(
+                {
+                    "type": "error",
+                    "message": "Voice session failed. Check backend AWS Bedrock configuration and logs.",
+                }
+            )
+        except Exception:
+            pass
     finally:
-        await agent.stop()
+        if agent is not None:
+            await agent.stop()

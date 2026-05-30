@@ -110,7 +110,7 @@ export class WebSocketService {
           }
         };
 
-        this.ws.onmessage = (event: MessageEvent) => {
+        this.ws.onmessage = (event) => {
           this.handleMessage(event);
         };
 
@@ -119,7 +119,7 @@ export class WebSocketService {
           this.handleConnectionError(error, reject);
         };
 
-        this.ws.onclose = (_event: CloseEvent) => {
+        this.ws.onclose = (_event) => {
           if (this._connectionState === 'connected') {
             // Unexpected close — connection was lost
             this.stopAudio();
@@ -156,10 +156,10 @@ export class WebSocketService {
     }
   }
 
-  private handleMessage(event: MessageEvent): void {
+  private handleMessage(event: { data?: unknown }): void {
     let message: { type: string; [key: string]: unknown };
     try {
-      message = JSON.parse(event.data as string);
+      message = JSON.parse(String(event.data));
     } catch {
       // Ignore malformed messages
       return;
@@ -199,6 +199,24 @@ export class WebSocketService {
         }
         this.setConnectionState('disconnected');
         break;
+
+      case 'error': {
+        // Backend reported a real startup/streaming error. Surface that message
+        // instead of waiting for the socket close handler to show a generic
+        // "connection lost" error.
+        this.stopAudio();
+        const errorMessage =
+          typeof message.message === 'string'
+            ? message.message
+            : 'Voice session failed. Please check backend configuration.';
+        this.setConnectionState('error');
+        this.eventHandlers.onError?.(new Error(errorMessage));
+        if (this.ws) {
+          this.ws.close();
+          this.ws = null;
+        }
+        break;
+      }
 
       default:
         // Unknown message type — ignore gracefully
