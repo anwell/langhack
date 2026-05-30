@@ -31,3 +31,36 @@ describe('WebSocketService backend error messages', () => {
     expect(service.ws).toBeNull();
   });
 });
+
+describe('WebSocketService transcript messages', () => {
+  it('passes assistant English translations through transcript events', () => {
+    const service = new WebSocketService('ws://example.test/ws') as unknown as {
+      setEventHandlers: WebSocketService['setEventHandlers'];
+      handleMessage: (event: MessageEvent) => void;
+    };
+    const transcripts: unknown[] = [];
+
+    service.setEventHandlers({
+      onTranscript: (entry) => transcripts.push(entry),
+    });
+
+    service.handleMessage({
+      data: JSON.stringify({
+        type: 'transcript',
+        role: 'assistant',
+        text: '¡Hola!',
+        english_translation: 'Hello!',
+        is_final: true,
+      }),
+    } as MessageEvent);
+
+    expect(transcripts).toEqual([
+      {
+        role: 'assistant',
+        text: '¡Hola!',
+        english_translation: 'Hello!',
+        is_final: true,
+      },
+    ]);
+  });
+});

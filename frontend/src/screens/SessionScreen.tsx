@@ -22,7 +22,7 @@ import {
   ConnectionState,
   SessionConfig,
 } from '../services/WebSocketService';
-import { saveSession } from '../services/StorageService';
+import { getLanguageSettings, saveSession } from '../services/StorageService';
 
 // Keep screen awake during session (expo-keep-awake or no-op if unavailable)
 let activateKeepAwake: (() => void | Promise<void>) | undefined;
@@ -67,6 +67,7 @@ export function SessionScreen({
 
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [showEnglishTranslations, setShowEnglishTranslations] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
@@ -155,6 +156,9 @@ export function SessionScreen({
     setError(null);
     setConnectionState('connecting');
 
+    const languageSettings = await getLanguageSettings();
+    setShowEnglishTranslations(languageSettings.show_live_english_translations);
+
     const wsService = wsServiceRef.current;
 
     wsService.setEventHandlers({
@@ -165,6 +169,7 @@ export function SessionScreen({
             {
               role: entry.role,
               text: entry.text,
+              english_translation: entry.english_translation,
               timestamp: new Date().toISOString(),
             },
           ]);
@@ -204,6 +209,7 @@ export function SessionScreen({
       scenario_context: params.scenario_context,
       target_language: params.target_language,
       scenario_id: params.scenario_id,
+      show_english_translations: languageSettings.show_live_english_translations,
     };
 
     try {
@@ -319,7 +325,11 @@ export function SessionScreen({
           </Text>
         )}
         {transcript.map((entry, index) => (
-          <TranscriptBubble key={`${entry.timestamp}-${index}`} entry={entry} />
+          <TranscriptBubble
+            key={`${entry.timestamp}-${index}`}
+            entry={entry}
+            showEnglishTranslation={showEnglishTranslations}
+          />
         ))}
       </ScrollView>
 
@@ -347,8 +357,16 @@ export function SessionScreen({
 /**
  * A single transcript entry bubble.
  */
-function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
+function TranscriptBubble({
+  entry,
+  showEnglishTranslation,
+}: {
+  entry: TranscriptEntry;
+  showEnglishTranslation: boolean;
+}) {
   const isUser = entry.role === 'user';
+  const shouldShowEnglishTranslation =
+    showEnglishTranslation && !isUser && Boolean(entry.english_translation);
 
   return (
     <View
@@ -361,6 +379,12 @@ function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
     >
       <Text style={styles.bubbleLabel}>{isUser ? 'You' : 'AI'}</Text>
       <Text style={styles.bubbleText}>{entry.text}</Text>
+      {shouldShowEnglishTranslation ? (
+        <View style={styles.translationContainer}>
+          <Text style={styles.translationLabel}>English</Text>
+          <Text style={styles.translationText}>{entry.english_translation}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -482,6 +506,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     color: '#1C1C1E',
+  },
+  translationContainer: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#D1D5DB',
+  },
+  translationLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: '#6B7280',
+    marginBottom: 3,
+  },
+  translationText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontStyle: 'italic',
+    color: '#4B5563',
   },
   controlsContainer: {
     alignItems: 'center',

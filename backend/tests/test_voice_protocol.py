@@ -2,7 +2,11 @@
 
 import pytest
 
-from app.voice import bidi_event_to_client_message, client_message_to_bidi_event
+from app.voice import (
+    bidi_event_to_client_message,
+    client_message_to_bidi_event,
+    send_client_bidi_output,
+)
 
 
 def test_client_audio_message_maps_to_bidi_audio_input():
@@ -59,6 +63,97 @@ def test_bidi_transcript_stream_maps_to_frontend_transcript_message():
         "text": "¡Hola!",
         "is_final": True,
     }
+
+
+def test_bidi_transcript_stream_maps_english_translation_when_present():
+    message = bidi_event_to_client_message(
+        {
+            "type": "bidi_transcript_stream",
+            "role": "assistant",
+            "text": "¡Hola!",
+            "english_translation": "Hello!",
+            "is_final": True,
+        }
+    )
+
+    assert message == {
+        "type": "transcript",
+        "role": "assistant",
+        "text": "¡Hola!",
+        "english_translation": "Hello!",
+        "is_final": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_send_client_bidi_output_adds_final_assistant_translation(monkeypatch):
+    sent_messages = []
+
+    class FakeWebSocket:
+        async def send_json(self, message):
+            sent_messages.append(message)
+
+    monkeypatch.setattr("app.voice.translate_text_to_english", lambda text, source: "Hello!")
+
+    await send_client_bidi_output(
+        FakeWebSocket(),
+        {
+            "type": "bidi_transcript_stream",
+            "role": "assistant",
+            "text": "¡Hola!",
+            "is_final": True,
+        },
+        show_english_translations=True,
+        target_language="es",
+    )
+
+    assert sent_messages == [
+        {
+            "type": "transcript",
+            "role": "assistant",
+            "text": "¡Hola!",
+            "english_translation": "Hello!",
+            "is_final": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_client_bidi_output_skips_translation_when_disabled(monkeypatch):
+    sent_messages = []
+    translate_calls = []
+
+    class FakeWebSocket:
+        async def send_json(self, message):
+            sent_messages.append(message)
+
+    def fake_translate(text, source):
+        translate_calls.append((text, source))
+        return "Hello!"
+
+    monkeypatch.setattr("app.voice.translate_text_to_english", fake_translate)
+
+    await send_client_bidi_output(
+        FakeWebSocket(),
+        {
+            "type": "bidi_transcript_stream",
+            "role": "assistant",
+            "text": "¡Hola!",
+            "is_final": True,
+        },
+        show_english_translations=False,
+        target_language="es",
+    )
+
+    assert translate_calls == []
+    assert sent_messages == [
+        {
+            "type": "transcript",
+            "role": "assistant",
+            "text": "¡Hola!",
+            "is_final": True,
+        }
+    ]
 
 
 def test_bidi_interruption_maps_to_barge_in_message():
