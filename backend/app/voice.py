@@ -8,13 +8,23 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from strands.experimental.bidi.tools import stop_conversation
-from strands.experimental.bidi.types.events import BidiAudioInputEvent
+from strands.experimental.bidi.types.events import BidiAudioInputEvent, BidiInputEvent, BidiTextInputEvent
 
 from app.config import get_settings
 from app.prompts import build_conversation_prompt
 from app.tools import get_vocabulary_hint, signal_session_complete
 
 router = APIRouter()
+
+
+def build_session_opening_instruction(scenario_context: str, target_language: str) -> str:
+    """Build the initial text event that asks the agent to start the roleplay."""
+    return (
+        f"Begin this {target_language} role-play now. "
+        "Speak first as the scenario character with one short, natural opening line. "
+        "Do not explain the task or mention that this is an instruction. "
+        f"Scenario: {scenario_context}"
+    )
 
 
 def create_bidi_agent(system_prompt: str):
@@ -123,6 +133,25 @@ async def receive_client_bidi_input(ws: WebSocket) -> BidiAudioInputEvent:
             continue
 
 
+def create_session_input_source(
+    ws: WebSocket, scenario_context: str, target_language: str
+):
+    """Return an input source that prompts the agent first, then streams client audio."""
+    opening_sent = False
+
+    async def receive_session_input() -> BidiInputEvent:
+        nonlocal opening_sent
+        if not opening_sent:
+            opening_sent = True
+            return BidiTextInputEvent(
+                text=build_session_opening_instruction(scenario_context, target_language),
+                role="user",
+            )
+        return await receive_client_bidi_input(ws)
+
+    return receive_session_input
+
+
 async def send_client_bidi_output(
     ws: WebSocket,
     event: dict[str, Any],
@@ -175,7 +204,7 @@ async def websocket_endpoint(ws: WebSocket):
         agent = create_bidi_agent(system_prompt)
 
         await agent.run(
-            inputs=[lambda: receive_client_bidi_input(ws)],
+            inputs=[create_session_input_source(ws, scenario_context, target_language)],
             outputs=[
                 lambda event: send_client_bidi_output(
                     ws,

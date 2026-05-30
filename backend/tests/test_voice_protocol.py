@@ -4,7 +4,9 @@ import pytest
 
 from app.voice import (
     bidi_event_to_client_message,
+    build_session_opening_instruction,
     client_message_to_bidi_event,
+    create_session_input_source,
     send_client_bidi_output,
 )
 
@@ -31,6 +33,35 @@ def test_client_audio_message_maps_to_bidi_audio_input():
 def test_client_non_audio_messages_are_rejected(message):
     with pytest.raises(ValueError):
         client_message_to_bidi_event(message)
+
+
+def test_session_opening_instruction_tells_agent_to_speak_first():
+    instruction = build_session_opening_instruction("Order at a café", "es")
+
+    assert "Begin this es role-play now" in instruction
+    assert "Speak first as the scenario character" in instruction
+    assert "Order at a café" in instruction
+
+
+@pytest.mark.asyncio
+async def test_session_input_source_sends_opening_then_client_audio():
+    class FakeWebSocket:
+        def __init__(self):
+            self.messages = [{"type": "audio", "data": "AAAA"}]
+
+        async def receive_json(self):
+            return self.messages.pop(0)
+
+    input_source = create_session_input_source(FakeWebSocket(), "Order at a café", "es")
+
+    first_event = await input_source()
+    second_event = await input_source()
+
+    assert first_event["type"] == "bidi_text_input"
+    assert first_event["role"] == "user"
+    assert "Speak first as the scenario character" in first_event["text"]
+    assert second_event["type"] == "bidi_audio_input"
+    assert second_event["audio"] == "AAAA"
 
 
 def test_bidi_audio_stream_maps_to_frontend_audio_message():
