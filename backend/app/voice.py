@@ -5,8 +5,6 @@ backed by Amazon Nova Sonic v2 for bidirectional voice streaming.
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from strands.experimental.bidi import BidiAgent
-from strands.experimental.bidi.models import BidiNovaSonicModel
 from strands.experimental.bidi.tools import stop_conversation
 
 from app.config import get_settings
@@ -14,18 +12,29 @@ from app.prompts import build_conversation_prompt
 from app.tools import get_vocabulary_hint, signal_session_complete
 
 router = APIRouter()
-settings = get_settings()
 
-sonic_model = BidiNovaSonicModel(
-    region_name=settings.aws_region,
-    provider_config={
-        "audio": {
-            "input_rate": 16000,
-            "output_rate": 24000,
-            "voice": "tiffany",
-        }
-    },
-)
+
+def create_bidi_agent(system_prompt: str):
+    """Create a BidiAgent lazily so REST endpoints can run without Sonic extras."""
+    from strands.experimental.bidi import BidiAgent
+    from strands.experimental.bidi.models import BidiNovaSonicModel
+
+    settings = get_settings()
+    sonic_model = BidiNovaSonicModel(
+        region_name=settings.aws_region,
+        provider_config={
+            "audio": {
+                "input_rate": 16000,
+                "output_rate": 24000,
+                "voice": "tiffany",
+            }
+        },
+    )
+    return BidiAgent(
+        model=sonic_model,
+        tools=[get_vocabulary_hint, signal_session_complete, stop_conversation],
+        system_prompt=system_prompt,
+    )
 
 
 @router.websocket("/ws")
@@ -44,18 +53,12 @@ async def websocket_endpoint(ws: WebSocket):
     """
     await ws.accept()
 
-    # First message contains session configuration
     init_msg = await ws.receive_json()
     scenario_context = init_msg.get("scenario_context", "")
     target_language = init_msg.get("target_language", "")
 
     system_prompt = build_conversation_prompt(scenario_context, target_language)
-
-    agent = BidiAgent(
-        model=sonic_model,
-        tools=[get_vocabulary_hint, signal_session_complete, stop_conversation],
-        system_prompt=system_prompt,
-    )
+    agent = create_bidi_agent(system_prompt)
 
     try:
         await agent.run(

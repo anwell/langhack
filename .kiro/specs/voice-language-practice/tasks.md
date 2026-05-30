@@ -140,8 +140,8 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
   - Ensure all tests pass, ask the user if questions arise.
   - At this point you should be able to: browse scenarios, start a voice session, see live transcript, end session, and view transcript in history.
 
-- [ ] 7. Teacher Agent feedback and post-session review
-  - [-] 7.1 Implement Teacher Agent backend endpoint
+- [x] 7. Teacher Agent feedback and post-session review
+  - [x] 7.1 Implement Teacher Agent backend endpoint
     - Create `backend/app/teacher_agent.py`
     - Implement `POST /feedback` endpoint accepting transcript, target_language, and available_scenarios
     - Create Strands Agent (non-bidi) or direct Bedrock Converse call
@@ -150,7 +150,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Handle failures: return error status, app shows retry option
     - _Requirements: 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9, 10.10, 10.11, 10.12, 10.17_
 
-  - [ ] 7.2 Implement Post-Session Review screen
+  - [x] 7.2 Implement Post-Session Review screen
     - Create `src/screens/PostSessionScreen.tsx`
     - Display after session ends with option to request feedback
     - On feedback received: display organized by 6 sections (highlights, improvements, corrections, vocabulary, suggested scenarios, lesson plan)
@@ -164,8 +164,8 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - **Property 10: Feedback persistence round-trip**
     - **Validates: Requirements 10.4, 10.6, 10.9, 10.11, 10.13**
 
-- [ ] 8. Box.com transcript upload
-  - [-] 8.1 Implement Box upload backend endpoint
+- [x] 8. Box.com transcript upload
+  - [x] 8.1 Implement Box upload backend endpoint
     - Create `backend/app/box_upload.py`
     - Implement `POST /transcripts/upload` accepting transcript, session_date, scenario_title
     - Use Box SDK or REST API to create file in designated folder
@@ -174,15 +174,15 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Read Box credentials from environment variables
     - _Requirements: 8.2, 8.3, 7.6_
 
-  - [ ] 8.2 Integrate Box upload into session end flow
+  - [x] 8.2 Integrate Box upload into session end flow
     - In `PostSessionScreen`: after session ends, automatically attempt Box upload
     - On success: store `box_file_url` in local session record, show "View in Box" link
     - On failure: show "cloud backup failed" message, add retry button in history screen
     - Transcript always persisted locally regardless of upload outcome
     - _Requirements: 8.1, 8.4, 8.7, 8.8, 8.9_
 
-- [ ] 9. Language configuration and settings
-  - [-] 9.1 Implement Settings screen with language selection
+- [x] 9. Language configuration and settings
+  - [x] 9.1 Implement Settings screen with language selection
     - Create `src/screens/SettingsScreen.tsx`
     - Target language picker (at least 2 languages)
     - Source language picker (defaults to English)
@@ -191,14 +191,14 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Block session start if no target language selected (prompt user)
     - _Requirements: 6.1, 6.2, 6.4, 6.5, 6.6, 6.7_
 
-  - [ ] 9.2 Wire language settings into session and feedback flows
+  - [x] 9.2 Wire language settings into session and feedback flows
     - Session init message includes selected target_language
     - Feedback request includes target_language and source_language
     - Scenario generation includes target_language
     - _Requirements: 6.3, 6.7, 10.2_
 
-- [ ] 10. Navigation and app shell
-  - [ ] 10.1 Implement app navigation and entry point
+- [x] 10. Navigation and app shell
+  - [x] 10.1 Implement app navigation and entry point
     - Set up React Navigation with tab/stack navigator
     - Tabs: Scenarios, History, Settings
     - Stack: ScenarioList → Session → PostSession

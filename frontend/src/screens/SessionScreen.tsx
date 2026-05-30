@@ -84,7 +84,7 @@ export function SessionScreen({
    */
   const persistSession = useCallback(
     async (finalTranscript: TranscriptEntry[]) => {
-      if (!params || finalTranscript.length === 0) return;
+      if (!params || finalTranscript.length === 0) return undefined;
       const record: SessionRecord = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         scenario_id: params.scenario_id,
@@ -96,8 +96,10 @@ export function SessionScreen({
       };
       try {
         await saveSession(record);
+        return record.id;
       } catch {
         // Storage failure should not block the user flow
+        return undefined;
       }
     },
     [params]
@@ -130,7 +132,7 @@ export function SessionScreen({
           ]);
         }
       },
-      onSessionEnded: (finalTranscript) => {
+      onSessionEnded: async (finalTranscript) => {
         if (finalTranscript && finalTranscript.length > 0) {
           setTranscript(finalTranscript);
         }
@@ -138,10 +140,11 @@ export function SessionScreen({
         deactivateKeepAwake?.();
         // Persist transcript locally immediately (Req 4.3, 8.9)
         const transcriptToSave = finalTranscript && finalTranscript.length > 0 ? finalTranscript : transcript;
-        persistSession(transcriptToSave);
+        const sessionId = await persistSession(transcriptToSave);
         // Navigate to post-session screen with transcript data
         if (navigation) {
           navigation.navigate('PostSession', {
+            session_id: sessionId,
             transcript: transcriptToSave,
             scenario_id: params.scenario_id,
             scenario_title: params.scenario_title,
@@ -174,7 +177,7 @@ export function SessionScreen({
       setConnectionState('error');
       deactivateKeepAwake?.();
     }
-  }, [params, navigation, transcript]);
+  }, [params, navigation, transcript, persistSession]);
 
   /**
    * Stop the session and disconnect.
