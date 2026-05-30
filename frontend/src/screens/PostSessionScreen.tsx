@@ -73,7 +73,7 @@ function AchievementBadge({ badge, delay }: { badge: AchievementRecord; delay: n
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
-  }));
+  }), [scale]);
 
   return (
     <Animated.View style={[styles.badgeItem, animatedStyle]}>

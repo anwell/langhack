@@ -1,0 +1,1 @@
+{"id":"int-8d5fa04a","kind":"field_change","created_at":"2026-05-30T17:53:33.891453Z","actor":"Anwell Wang","issue_id":"langhack-j1x","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Fixed post-session web errors from Reanimated dependency arrays and keep-awake teardown race."}}

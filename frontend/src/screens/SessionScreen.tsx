@@ -25,8 +25,8 @@ import {
 import { saveSession } from '../services/StorageService';
 
 // Keep screen awake during session (expo-keep-awake or no-op if unavailable)
-let activateKeepAwake: (() => void) | undefined;
-let deactivateKeepAwake: (() => void) | undefined;
+let activateKeepAwake: (() => void | Promise<void>) | undefined;
+let deactivateKeepAwake: (() => void | Promise<void>) | undefined;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const keepAwake = require('expo-keep-awake');
@@ -75,8 +75,46 @@ export function SessionScreen({
   );
   const scrollViewRef = useRef<ScrollView>(null);
   const sessionStartRef = useRef<string>(new Date().toISOString());
+  const keepAwakeActiveRef = useRef(false);
+  const keepAwakeActivationRef = useRef<Promise<void> | null>(null);
   const isSessionActive = connectionState === 'connected';
   const MAX_MANUAL_RETRIES = 3;
+
+  const activateSessionKeepAwake = useCallback(() => {
+    if (!activateKeepAwake || keepAwakeActiveRef.current || keepAwakeActivationRef.current) {
+      return;
+    }
+
+    keepAwakeActivationRef.current = Promise.resolve(activateKeepAwake())
+      .then(() => {
+        keepAwakeActiveRef.current = true;
+      })
+      .catch(() => {
+        keepAwakeActiveRef.current = false;
+      })
+      .finally(() => {
+        keepAwakeActivationRef.current = null;
+      });
+  }, []);
+
+  const deactivateSessionKeepAwake = useCallback(() => {
+    if (!deactivateKeepAwake && !keepAwakeActivationRef.current) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        await keepAwakeActivationRef.current;
+        if (!keepAwakeActiveRef.current || !deactivateKeepAwake) {
+          return;
+        }
+        keepAwakeActiveRef.current = false;
+        await deactivateKeepAwake();
+      } catch {
+        keepAwakeActiveRef.current = false;
+      }
+    })();
+  }, []);
 
   /**
    * Persist the session transcript locally.
@@ -137,7 +175,7 @@ export function SessionScreen({
           setTranscript(finalTranscript);
         }
         setConnectionState('disconnected');
-        deactivateKeepAwake?.();
+        deactivateSessionKeepAwake();
         // Persist transcript locally immediately (Req 4.3, 8.9)
         const transcriptToSave = finalTranscript && finalTranscript.length > 0 ? finalTranscript : transcript;
         const sessionId = await persistSession(transcriptToSave);
@@ -155,7 +193,7 @@ export function SessionScreen({
       onError: (err) => {
         setError(err.message || 'Connection error occurred');
         setConnectionState('error');
-        deactivateKeepAwake?.();
+        deactivateSessionKeepAwake();
       },
       onConnectionStateChange: (state) => {
         setConnectionState(state);
@@ -169,15 +207,15 @@ export function SessionScreen({
     };
 
     try {
-      activateKeepAwake?.();
+      activateSessionKeepAwake();
       await wsService.connect(config);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to connect';
       setError(message);
       setConnectionState('error');
-      deactivateKeepAwake?.();
+      deactivateSessionKeepAwake();
     }
-  }, [params, navigation, transcript, persistSession]);
+  }, [params, navigation, transcript, persistSession, activateSessionKeepAwake, deactivateSessionKeepAwake]);
 
   /**
    * Stop the session and disconnect.
@@ -186,7 +224,7 @@ export function SessionScreen({
     const wsService = wsServiceRef.current;
     wsService.disconnect();
     setConnectionState('disconnected');
-    deactivateKeepAwake?.();
+    deactivateSessionKeepAwake();
     // Persist transcript locally immediately (Req 4.3, 8.9)
     persistSession(transcript);
 
@@ -199,7 +237,7 @@ export function SessionScreen({
         target_language: params.target_language,
       });
     }
-  }, [navigation, params, transcript, persistSession]);
+  }, [navigation, params, transcript, persistSession, deactivateSessionKeepAwake]);
 
   /**
    * Retry connection after an error.
@@ -220,7 +258,7 @@ export function SessionScreen({
     return () => {
       // Cleanup on unmount
       wsServiceRef.current.disconnect();
-      deactivateKeepAwake?.();
+      deactivateSessionKeepAwake();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

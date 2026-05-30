@@ -82,16 +82,16 @@ export function PassFailBadge({ result }: PassFailBadgeProps) {
   const badgeAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: badgeScale.value }],
     opacity: badgeOpacity.value,
-  }));
+  }), [badgeScale, badgeOpacity]);
 
   const sparkleAnimatedStyle = useAnimatedStyle(() => ({
     opacity: sparkleOpacity.value,
     transform: [{ scale: sparkleScale.value }],
-  }));
+  }), [sparkleOpacity, sparkleScale]);
 
   const pulseAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulseScale.value }],
-  }));
+  }), [pulseScale]);
 
   return (
     <View style={styles.wrapper}>
