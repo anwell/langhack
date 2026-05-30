@@ -182,6 +182,38 @@ def _multipart_body(filename: str, folder_id: str, content: bytes, boundary: str
     return b"".join(parts)
 
 
+def _box_error_message(exc: urllib.error.HTTPError) -> str:
+    """Return an actionable Box upload error from an HTTPError response."""
+    detail = exc.read().decode("utf-8", errors="replace").strip()
+    reason = getattr(exc, "reason", "") or "HTTP error"
+    status = f"{exc.code} {reason}".strip()
+
+    if detail:
+        try:
+            payload = json.loads(detail)
+        except json.JSONDecodeError:
+            parsed_detail = detail
+        else:
+            parsed_detail = (
+                payload.get("message")
+                or payload.get("error_description")
+                or payload.get("error")
+                or detail
+            )
+    elif exc.code == 401:
+        parsed_detail = "Box developer token is invalid or expired."
+    elif exc.code == 403:
+        parsed_detail = "Box token does not have access to the configured folder."
+    elif exc.code == 404:
+        parsed_detail = "Configured Box folder was not found."
+    elif exc.code == 409:
+        parsed_detail = "A transcript with this filename already exists in the Box folder."
+    else:
+        parsed_detail = "Box returned an empty error response."
+
+    return f"Box upload failed ({status}): {parsed_detail}"
+
+
 @router.post("/upload", response_model=TranscriptUploadResponse)
 async def upload_transcript(request: TranscriptUploadRequest) -> TranscriptUploadResponse:
     """Upload a transcript text file to the configured Box folder."""
@@ -206,8 +238,7 @@ async def upload_transcript(request: TranscriptUploadRequest) -> TranscriptUploa
         with urllib.request.urlopen(upload_request, timeout=30) as response:  # noqa: S310 - fixed Box API URL
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        return TranscriptUploadResponse(success=False, error=f"Box upload failed: {detail}")
+        return TranscriptUploadResponse(success=False, error=_box_error_message(exc))
     except Exception as exc:
         return TranscriptUploadResponse(success=False, error=str(exc))
 
