@@ -42,7 +42,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - **Property 3: System prompt includes scenario and language**
     - **Validates: Requirements 2.3, 6.3**
 
-- [ ] 2. Frontend foundation and voice session UI
+- [x] 2. Frontend foundation and voice session UI
   - [x] 2.1 Set up React/Expo project structure
     - Initialize Expo project in `frontend/` directory
     - Install dependencies: `expo-av`, `react-native-async-storage`, WebSocket support
@@ -58,7 +58,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Handle WebSocket messages: `audio` (enqueue to ring buffer), `transcript` (emit event), `barge-in` (clear buffer), `session_ended` (close)
     - _Requirements: 3.1, 3.3, 3.7, 5.1, 5.2, 5.5_
 
-  - [-] 2.3 Implement Session screen with voice conversation UI
+  - [x] 2.3 Implement Session screen with voice conversation UI
     - Create `src/screens/SessionScreen.tsx`
     - On mount: send init message `{scenario_context, target_language, scenario_id}` over WebSocket
     - Start audio capture and playback automatically (hands-free)
@@ -73,19 +73,19 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - **Property 4: Transcript entries have valid speaker labels**
     - **Validates: Requirements 4.2**
 
-- [~] 3. Checkpoint - Voice session end-to-end
+- [x] 3. Checkpoint - Voice session end-to-end
   - Ensure all tests pass, ask the user if questions arise.
   - At this point you should be able to: start the FastAPI server, open the frontend, connect via WebSocket, and have a real-time voice conversation with Nova Sonic through the BidiAgent.
 
-- [ ] 4. Scenario management (list, cache, generate)
-  - [~] 4.1 Implement backend scenario endpoints
+- [x] 4. Scenario management (list, cache, generate)
+  - [x] 4.1 Implement backend scenario endpoints
     - Create `backend/app/scenarios.py`
     - Implement `GET /scenarios` — returns static list of preloaded scenarios as JSON
     - Create `backend/app/data/scenarios.json` with 3-5 preloaded scenarios per supported language
     - Implement Pydantic models: `Scenario` (id, title, description, target_language, key_vocabulary, system_prompt, source, created_at)
     - _Requirements: 1.3, 9.6_
 
-  - [~] 4.2 Implement Scenario Agent with Apify tool
+  - [x] 4.2 Implement Scenario Agent with Apify tool
     - Create `backend/app/scenario_agent.py`
     - Implement `POST /scenarios/generate` endpoint accepting `target_language` and `proficiency_context`
     - Create Strands Agent (non-bidi) with Apify scraping tool
@@ -94,7 +94,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Handle failures gracefully: return empty list with `success: false`
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.11_
 
-  - [~] 4.3 Implement Scenario List screen with caching and merge logic
+  - [x] 4.3 Implement Scenario List screen with caching and merge logic
     - Create `src/screens/ScenarioListScreen.tsx`
     - Display scenarios with title and description (max 150 chars)
     - On mount: load cached scenarios from AsyncStorage, fetch from backend, merge (deduplicate by ID)
@@ -111,8 +111,8 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - **Property 8: Scenario merge deduplication**
     - **Validates: Requirements 1.1, 1.3, 9.4, 9.6, 9.10**
 
-- [ ] 5. Transcript persistence and history
-  - [~] 5.1 Implement local storage service for transcripts
+- [x] 5. Transcript persistence and history
+  - [x] 5.1 Implement local storage service for transcripts
     - Create `src/services/StorageService.ts`
     - Implement `saveSession(record: SessionRecord): Promise<void>` — persist to AsyncStorage
     - Implement `getSessions(): Promise<SessionRecord[]>` — retrieve all, sorted reverse chronological
@@ -121,7 +121,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - On session end in SessionScreen: persist transcript locally immediately
     - _Requirements: 4.3, 8.9_
 
-  - [~] 5.2 Implement Transcript History screen
+  - [x] 5.2 Implement Transcript History screen
     - Create `src/screens/HistoryScreen.tsx`
     - List past sessions in reverse chronological order (date + scenario title)
     - Tap entry → view full transcript
@@ -136,12 +136,12 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - **Property 11: Conditional data-driven display**
     - **Validates: Requirements 4.3, 4.4, 8.4, 8.5, 8.9, 10.14**
 
-- [~] 6. Checkpoint - Scenario selection and transcript history
+- [x] 6. Checkpoint - Scenario selection and transcript history
   - Ensure all tests pass, ask the user if questions arise.
   - At this point you should be able to: browse scenarios, start a voice session, see live transcript, end session, and view transcript in history.
 
 - [ ] 7. Teacher Agent feedback and post-session review
-  - [~] 7.1 Implement Teacher Agent backend endpoint
+  - [-] 7.1 Implement Teacher Agent backend endpoint
     - Create `backend/app/teacher_agent.py`
     - Implement `POST /feedback` endpoint accepting transcript, target_language, and available_scenarios
     - Create Strands Agent (non-bidi) or direct Bedrock Converse call
@@ -150,7 +150,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Handle failures: return error status, app shows retry option
     - _Requirements: 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9, 10.10, 10.11, 10.12, 10.17_
 
-  - [~] 7.2 Implement Post-Session Review screen
+  - [ ] 7.2 Implement Post-Session Review screen
     - Create `src/screens/PostSessionScreen.tsx`
     - Display after session ends with option to request feedback
     - On feedback received: display organized by 6 sections (highlights, improvements, corrections, vocabulary, suggested scenarios, lesson plan)
@@ -165,7 +165,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - **Validates: Requirements 10.4, 10.6, 10.9, 10.11, 10.13**
 
 - [ ] 8. Box.com transcript upload
-  - [~] 8.1 Implement Box upload backend endpoint
+  - [-] 8.1 Implement Box upload backend endpoint
     - Create `backend/app/box_upload.py`
     - Implement `POST /transcripts/upload` accepting transcript, session_date, scenario_title
     - Use Box SDK or REST API to create file in designated folder
@@ -174,7 +174,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Read Box credentials from environment variables
     - _Requirements: 8.2, 8.3, 7.6_
 
-  - [~] 8.2 Integrate Box upload into session end flow
+  - [ ] 8.2 Integrate Box upload into session end flow
     - In `PostSessionScreen`: after session ends, automatically attempt Box upload
     - On success: store `box_file_url` in local session record, show "View in Box" link
     - On failure: show "cloud backup failed" message, add retry button in history screen
@@ -182,7 +182,7 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - _Requirements: 8.1, 8.4, 8.7, 8.8, 8.9_
 
 - [ ] 9. Language configuration and settings
-  - [~] 9.1 Implement Settings screen with language selection
+  - [-] 9.1 Implement Settings screen with language selection
     - Create `src/screens/SettingsScreen.tsx`
     - Target language picker (at least 2 languages)
     - Source language picker (defaults to English)
@@ -191,21 +191,21 @@ This plan delivers the voice language practice MVP in vertical slices, prioritiz
     - Block session start if no target language selected (prompt user)
     - _Requirements: 6.1, 6.2, 6.4, 6.5, 6.6, 6.7_
 
-  - [~] 9.2 Wire language settings into session and feedback flows
+  - [ ] 9.2 Wire language settings into session and feedback flows
     - Session init message includes selected target_language
     - Feedback request includes target_language and source_language
     - Scenario generation includes target_language
     - _Requirements: 6.3, 6.7, 10.2_
 
 - [ ] 10. Navigation and app shell
-  - [~] 10.1 Implement app navigation and entry point
+  - [ ] 10.1 Implement app navigation and entry point
     - Set up React Navigation with tab/stack navigator
     - Tabs: Scenarios, History, Settings
     - Stack: ScenarioList → Session → PostSession
     - Wire all screens together
     - _Requirements: 1.2, 4.4_
 
-- [~] 11. Final checkpoint - Full MVP integration
+- [ ] 11. Final checkpoint - Full MVP integration
   - Ensure all tests pass, ask the user if questions arise.
   - Full flow: select language → browse scenarios → start voice session → live transcript → end session → view feedback → upload to Box → view in history.
 

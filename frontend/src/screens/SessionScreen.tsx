@@ -16,12 +16,13 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { TranscriptEntry } from '../types';
+import { TranscriptEntry, SessionRecord } from '../types';
 import {
   WebSocketService,
   ConnectionState,
   SessionConfig,
 } from '../services/WebSocketService';
+import { saveSession } from '../services/StorageService';
 
 // Keep screen awake during session (expo-keep-awake or no-op if unavailable)
 let activateKeepAwake: (() => void) | undefined;
@@ -73,8 +74,34 @@ export function SessionScreen({
     injectedService || new WebSocketService()
   );
   const scrollViewRef = useRef<ScrollView>(null);
+  const sessionStartRef = useRef<string>(new Date().toISOString());
   const isSessionActive = connectionState === 'connected';
   const MAX_MANUAL_RETRIES = 3;
+
+  /**
+   * Persist the session transcript locally.
+   * Requirements: 4.3, 8.9 — transcript is always saved locally regardless of upload outcome.
+   */
+  const persistSession = useCallback(
+    async (finalTranscript: TranscriptEntry[]) => {
+      if (!params || finalTranscript.length === 0) return;
+      const record: SessionRecord = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        scenario_id: params.scenario_id,
+        scenario_title: params.scenario_title,
+        target_language: params.target_language,
+        started_at: sessionStartRef.current,
+        ended_at: new Date().toISOString(),
+        transcript: finalTranscript,
+      };
+      try {
+        await saveSession(record);
+      } catch {
+        // Storage failure should not block the user flow
+      }
+    },
+    [params]
+  );
 
   /**
    * Connect to the WebSocket and start the voice session.
@@ -109,10 +136,13 @@ export function SessionScreen({
         }
         setConnectionState('disconnected');
         deactivateKeepAwake?.();
+        // Persist transcript locally immediately (Req 4.3, 8.9)
+        const transcriptToSave = finalTranscript && finalTranscript.length > 0 ? finalTranscript : transcript;
+        persistSession(transcriptToSave);
         // Navigate to post-session screen with transcript data
         if (navigation) {
           navigation.navigate('PostSession', {
-            transcript: finalTranscript.length > 0 ? finalTranscript : transcript,
+            transcript: transcriptToSave,
             scenario_id: params.scenario_id,
             scenario_title: params.scenario_title,
             target_language: params.target_language,
@@ -154,6 +184,8 @@ export function SessionScreen({
     wsService.disconnect();
     setConnectionState('disconnected');
     deactivateKeepAwake?.();
+    // Persist transcript locally immediately (Req 4.3, 8.9)
+    persistSession(transcript);
 
     // Navigate to post-session screen
     if (navigation && params) {
@@ -164,7 +196,7 @@ export function SessionScreen({
         target_language: params.target_language,
       });
     }
-  }, [navigation, params, transcript]);
+  }, [navigation, params, transcript, persistSession]);
 
   /**
    * Retry connection after an error.

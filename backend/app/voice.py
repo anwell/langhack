@@ -9,13 +9,15 @@ from strands.experimental.bidi import BidiAgent
 from strands.experimental.bidi.models import BidiNovaSonicModel
 from strands.experimental.bidi.tools import stop_conversation
 
+from app.config import get_settings
 from app.prompts import build_conversation_prompt
 from app.tools import get_vocabulary_hint, signal_session_complete
 
 router = APIRouter()
+settings = get_settings()
 
 sonic_model = BidiNovaSonicModel(
-    region_name="us-east-1",
+    region_name=settings.aws_region,
     provider_config={
         "audio": {
             "input_rate": 16000,
