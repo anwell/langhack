@@ -6,6 +6,7 @@ import { getCachedScenarios, getLanguageSettings, saveSession, updateSession } f
 import { requestFeedback, uploadTranscript } from '../services/ApiService';
 import { PassFailBadge } from '../components/PassFailBadge';
 import { AchievementRecord, updateAchievementState } from '../services/AchievementService';
+import { palette, shadow, tightShadow } from '../theme';
 
 /**
  * Returns the appropriate color for a given score.
@@ -191,16 +192,19 @@ export function PostSessionScreen({ route, params: directParams, navigation }: P
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Session review</Text>
+      <Text style={styles.kicker}>SESSION WRAP</Text>
+      <Text style={styles.title}>Session debrief</Text>
       <Text style={styles.subtitle}>{params.scenario_title}</Text>
-      <Text style={styles.sectionTitle}>Transcript saved locally</Text>
-      <Text style={styles.body}>{params.transcript.length} entries are available in History.</Text>
+      <View style={styles.savedStrip}>
+        <Text style={styles.savedCount}>{params.transcript.length}</Text>
+        <Text style={styles.savedCopy}>transcript entries saved to your logbook</Text>
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Cloud backup</Text>
         {loadingUpload ? (
           <View style={styles.uploadingRow}>
-            <ActivityIndicator size="small" color="#2563eb" />
+            <ActivityIndicator size="small" color={palette.indigo} />
             <Text style={styles.uploadingText}>Uploading to Box...</Text>
           </View>
         ) : null}
@@ -302,35 +306,39 @@ function FeedbackList({ title, items }: { title: string; items: string[] }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f7f7fb' },
+  container: { flex: 1, backgroundColor: palette.paper },
   content: { padding: 20, paddingBottom: 40 },
-  title: { fontSize: 28, fontWeight: '700', color: '#111827' },
-  subtitle: { color: '#6b7280', marginTop: 4, marginBottom: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', marginTop: 18, marginBottom: 8, color: '#111827' },
-  body: { color: '#374151', lineHeight: 20 },
-  card: { borderRadius: 16, padding: 16, backgroundColor: '#fff', marginVertical: 12 },
-  feedback: { marginTop: 16, borderRadius: 16, backgroundColor: '#fff', padding: 16 },
+  kicker: { color: palette.coral, fontSize: 12, fontWeight: '800', marginBottom: 8 },
+  title: { fontSize: 34, lineHeight: 38, fontWeight: '900', color: palette.ink },
+  subtitle: { color: palette.muted, marginTop: 6, marginBottom: 16, fontWeight: '700' },
+  sectionTitle: { fontSize: 18, fontWeight: '900', marginTop: 18, marginBottom: 8, color: palette.ink },
+  body: { color: palette.ink, lineHeight: 21 },
+  savedStrip: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.amber, borderRadius: 8, padding: 14, marginBottom: 14, ...tightShadow },
+  savedCount: { color: palette.ink, fontSize: 30, fontWeight: '900' },
+  savedCopy: { flex: 1, color: palette.ink, fontWeight: '800' },
+  card: { borderRadius: 8, padding: 16, backgroundColor: palette.surface, marginVertical: 12, borderWidth: 1, borderColor: palette.line, ...shadow },
+  feedback: { marginTop: 16, borderRadius: 8, backgroundColor: palette.surface, padding: 16, borderWidth: 1, borderColor: palette.line, ...shadow },
   loadingContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 32 },
-  loadingText: { marginTop: 12, fontSize: 16, color: '#6b7280', fontWeight: '500' },
+  loadingText: { marginTop: 12, fontSize: 16, color: palette.muted, fontWeight: '800' },
   uploadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  uploadingText: { color: '#6b7280', fontSize: 14 },
-  button: { minHeight: 48, borderRadius: 12, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center', padding: 14 },
-  smallButton: { marginTop: 10, alignSelf: 'flex-start', borderRadius: 10, backgroundColor: '#2563eb', paddingVertical: 10, paddingHorizontal: 14 },
+  uploadingText: { color: palette.muted, fontSize: 14, fontWeight: '700' },
+  button: { minHeight: 48, borderRadius: 8, backgroundColor: palette.ink, alignItems: 'center', justifyContent: 'center', padding: 14 },
+  smallButton: { marginTop: 10, alignSelf: 'flex-start', borderRadius: 8, backgroundColor: palette.ink, paddingVertical: 10, paddingHorizontal: 14, ...tightShadow },
   buttonText: { color: '#fff', fontWeight: '700' },
-  success: { color: '#047857' },
-  error: { color: '#b91c1c', marginTop: 10 },
-  itemBox: { backgroundColor: '#f9fafb', borderRadius: 12, padding: 12, marginBottom: 10 },
-  itemTitle: { fontWeight: '700', marginBottom: 4 },
+  success: { color: palette.success, fontWeight: '800' },
+  error: { color: palette.danger, marginTop: 10, fontWeight: '800' },
+  itemBox: { backgroundColor: palette.surface, borderRadius: 8, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: palette.line },
+  itemTitle: { fontWeight: '900', marginBottom: 4, color: palette.ink },
   scoreContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 20, marginBottom: 12 },
   scoreText: { fontSize: 64, fontWeight: '800', lineHeight: 72 },
   scoreLabel: { fontSize: 20, fontWeight: '600', marginTop: 4 },
-  highlightsSection: { backgroundColor: '#dcfce7', borderRadius: 12, padding: 14, marginBottom: 12 },
-  correctionsSection: { backgroundColor: '#fee2e2', borderRadius: 12, padding: 14, marginBottom: 12 },
-  vocabularySection: { backgroundColor: '#dbeafe', borderRadius: 12, padding: 14, marginBottom: 12 },
-  improvementsSection: { backgroundColor: '#fef3c7', borderRadius: 12, padding: 14, marginBottom: 12 },
-  achievementsSection: { marginTop: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  highlightsSection: { backgroundColor: palette.mint, borderRadius: 8, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: palette.line },
+  correctionsSection: { backgroundColor: palette.rose, borderRadius: 8, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: palette.line },
+  vocabularySection: { backgroundColor: palette.sky, borderRadius: 8, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: palette.line },
+  improvementsSection: { backgroundColor: palette.amber, borderRadius: 8, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: palette.line },
+  achievementsSection: { marginTop: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: palette.line },
   badgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
-  badgeItem: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#fef9c3', borderRadius: 16, padding: 14, minWidth: 90 },
+  badgeItem: { alignItems: 'center', justifyContent: 'center', backgroundColor: palette.amber, borderRadius: 8, padding: 14, minWidth: 90, borderWidth: 1, borderColor: palette.line, ...tightShadow },
   badgeIcon: { fontSize: 32, marginBottom: 4 },
-  badgeLabel: { fontSize: 13, fontWeight: '700', color: '#111827', textAlign: 'center' },
+  badgeLabel: { fontSize: 13, fontWeight: '900', color: palette.ink, textAlign: 'center' },
 });

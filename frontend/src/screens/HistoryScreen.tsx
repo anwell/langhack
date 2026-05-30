@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SessionRecord } from '../types';
 import { getSessions } from '../services/StorageService';
+import { palette, shadow, tightShadow } from '../theme';
 
 export function HistoryScreen() {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
@@ -17,17 +18,22 @@ export function HistoryScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Transcript history</Text>
+      <Text style={styles.kicker}>LOGBOOK</Text>
+      <Text style={styles.title}>Saved conversations</Text>
       <FlatList
         data={sessions}
+        contentContainerStyle={styles.listContent}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.card} onPress={() => setSelected(item)}>
+            <View style={styles.cardCap} />
             <Text style={styles.cardTitle}>{item.scenario_title}</Text>
             <Text style={styles.meta}>{new Date(item.started_at).toLocaleString()}</Text>
             <Text style={styles.meta}>{item.transcript.length} transcript entries</Text>
-            {item.box_file_url ? <Text style={styles.link}>View in Box available</Text> : null}
-            {item.feedback ? <Text style={styles.link}>Feedback saved</Text> : null}
+            <View style={styles.tagRow}>
+              {item.box_file_url ? <Text style={styles.tag}>Box backup</Text> : null}
+              {item.feedback ? <Text style={styles.tag}>Feedback saved</Text> : null}
+            </View>
           </TouchableOpacity>
         )}
         ListEmptyComponent={<Text style={styles.empty}>No saved sessions yet.</Text>}
@@ -69,20 +75,25 @@ export function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f7f7fb' },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 16, color: '#111827' },
-  card: { borderRadius: 14, backgroundColor: '#fff', padding: 16, marginBottom: 12 },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  meta: { color: '#6b7280', marginTop: 4 },
-  link: { color: '#2563eb', marginTop: 6, fontWeight: '600' },
-  empty: { textAlign: 'center', color: '#6b7280', marginTop: 32 },
-  modal: { flex: 1, padding: 20, backgroundColor: '#fff' },
+  container: { flex: 1, padding: 20, backgroundColor: palette.paper },
+  kicker: { color: palette.coral, fontSize: 12, fontWeight: '800', marginBottom: 8 },
+  title: { fontSize: 32, lineHeight: 36, fontWeight: '900', marginBottom: 16, color: palette.ink },
+  listContent: { paddingBottom: 24 },
+  card: { position: 'relative', borderRadius: 8, backgroundColor: palette.surface, padding: 16, paddingTop: 21, marginBottom: 14, borderWidth: 1, borderColor: palette.line, overflow: 'hidden', ...shadow },
+  cardCap: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: palette.lemon },
+  cardTitle: { fontSize: 18, fontWeight: '900', color: palette.ink },
+  meta: { color: palette.muted, marginTop: 4, fontWeight: '600' },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  tag: { overflow: 'hidden', borderRadius: 999, backgroundColor: palette.lilac, color: palette.indigo, paddingHorizontal: 10, paddingVertical: 5, fontWeight: '700' },
+  link: { color: palette.indigo, marginTop: 6, fontWeight: '700' },
+  empty: { textAlign: 'center', color: palette.muted, marginTop: 32, fontWeight: '600' },
+  modal: { flex: 1, padding: 20, backgroundColor: palette.paper },
   transcript: { flex: 1, marginVertical: 12 },
-  turn: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  role: { textTransform: 'uppercase', color: '#2563eb', fontWeight: '700', marginBottom: 4 },
-  feedbackBox: { marginTop: 20, borderRadius: 12, backgroundColor: '#eef2ff', padding: 14, gap: 4 },
-  button: { borderRadius: 12, backgroundColor: '#2563eb', padding: 14, alignItems: 'center', marginTop: 10 },
-  buttonText: { color: '#fff', fontWeight: '700' },
-  secondary: { backgroundColor: '#f3f4f6' },
-  secondaryText: { color: '#111827' },
+  turn: { paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 8, backgroundColor: palette.surface, marginBottom: 10 },
+  role: { textTransform: 'uppercase', color: palette.coral, fontWeight: '800', marginBottom: 4 },
+  feedbackBox: { marginTop: 20, borderRadius: 8, backgroundColor: palette.lilac, padding: 14, gap: 4, borderWidth: 1, borderColor: palette.line },
+  button: { borderRadius: 8, backgroundColor: palette.ink, padding: 14, alignItems: 'center', marginTop: 10, ...tightShadow },
+  buttonText: { color: '#fff', fontWeight: '800' },
+  secondary: { backgroundColor: palette.surface },
+  secondaryText: { color: palette.ink },
 });
