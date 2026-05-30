@@ -3,12 +3,20 @@
 The production path can call Apify-powered research. This MVP keeps the server
 stateless and returns deterministic pedagogical scenarios when external scenario
 generation is unavailable.
+
+Apify scraper results are cached to disk (JSON files in .apify_cache/) so that
+repeated requests for the same destination+language return instantly. Cache
+entries expire after 24 hours.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 import httpx
@@ -22,14 +30,67 @@ logger = logging.getLogger(__name__)
 
 TRIPADVISOR_ACTOR_ID = "maxcopell~tripadvisor"
 
+# --- Disk cache for Apify scraper results ---
+
+CACHE_DIR = Path(__file__).resolve().parents[1] / ".apify_cache"
+CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
+
+
+def _cache_key(destination: str, target_language: str) -> str:
+    """Generate a filesystem-safe cache key from destination + language."""
+    raw = f"{destination.lower().strip()}:{target_language.lower().strip()}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _read_cache(destination: str, target_language: str) -> list[dict] | None:
+    """Return cached scraper results if fresh, else None."""
+    key = _cache_key(destination, target_language)
+    cache_file = CACHE_DIR / f"{key}.json"
+    if not cache_file.exists():
+        return None
+    try:
+        data = json.loads(cache_file.read_text())
+        cached_at = data.get("cached_at", 0)
+        if time.time() - cached_at > CACHE_TTL_SECONDS:
+            logger.info("Cache expired for '%s' (%s); will re-scrape.", destination, target_language)
+            return None
+        items = data.get("items", [])
+        logger.info("Cache hit for '%s' (%s): %d items.", destination, target_language, len(items))
+        return items
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to read cache file %s: %s", cache_file, exc)
+        return None
+
+
+def _write_cache(destination: str, target_language: str, items: list[dict]) -> None:
+    """Persist scraper results to disk."""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    key = _cache_key(destination, target_language)
+    cache_file = CACHE_DIR / f"{key}.json"
+    payload = {
+        "destination": destination,
+        "target_language": target_language,
+        "cached_at": time.time(),
+        "items": items,
+    }
+    try:
+        cache_file.write_text(json.dumps(payload, ensure_ascii=False))
+        logger.info("Cached %d items for '%s' (%s).", len(items), destination, target_language)
+    except OSError as exc:
+        logger.warning("Failed to write cache file %s: %s", cache_file, exc)
+
+
+# --- Apify scraper invocation ---
+
+
 async def invoke_tripadvisor_scraper(
     destination: str,
     target_language: str,
 ) -> list[dict]:
     """Invoke the Apify TripAdvisor actor and return scraped results.
 
-    Starts a run of the maxcopell/tripadvisor actor via the Apify REST API,
-    waits for it to finish, then fetches the dataset items.
+    Results are cached to disk for 24 hours. On cache hit the Apify API is
+    not called at all, making repeated requests instant.
 
     Args:
         destination: City or region to scrape (e.g. "Barcelona").
@@ -38,6 +99,11 @@ async def invoke_tripadvisor_scraper(
     Returns:
         List of raw scraped item dicts on success, empty list on failure.
     """
+    # Check disk cache first
+    cached = _read_cache(destination, target_language)
+    if cached is not None:
+        return cached
+
     settings = get_settings()
     apify_token = settings.apify_token
     if not apify_token:
@@ -77,6 +143,8 @@ async def invoke_tripadvisor_scraper(
             dataset_response.raise_for_status()
             items = dataset_response.json()
             if isinstance(items, list):
+                # Cache successful results to disk
+                _write_cache(destination, target_language, items)
                 return items
             return []
     except (httpx.HTTPStatusError, httpx.RequestError, httpx.TimeoutException) as exc:
@@ -121,21 +189,83 @@ SCENARIO_TEMPLATES: dict[str, dict[str, str | list[str]]] = {
         "title_template": "Ask for directions to {name}",
         "description_template": "Practice asking locals how to reach {name} ({category}), understand landmarks, and confirm walking directions.",
         "prompt_template": "You are a helpful local near {name} in {destination}. Help the learner find their way to {name} at {address}.",
-        "vocab_base": ["¿Dónde está...?", "how far", "turn left", "straight ahead"],
+        "vocab_base": [],  # populated per-language below
+        "thumbnail": "🗺️",
     },
     "RESTAURANT": {
         "title_template": "Order food at {name}",
         "description_template": "Practice ordering a meal at {name}, asking about the menu, and handling payment.",
         "prompt_template": "You are a waiter at {name} in {destination} ({address}). Help the learner order food and navigate the menu.",
-        "vocab_base": ["the menu", "I would like", "the bill", "recommend"],
+        "vocab_base": [],
+        "thumbnail": "🍽️",
     },
     "HOTEL": {
         "title_template": "Check in at {name}",
         "description_template": "Practice checking in at {name}, confirming your reservation, and asking about amenities.",
         "prompt_template": "You are a receptionist at {name} in {destination} ({address}). Help the learner check in and understand hotel services.",
-        "vocab_base": ["reservation", "room key", "checkout time", "breakfast"],
+        "vocab_base": [],
+        "thumbnail": "🏨",
     },
 }
+
+# Vocabulary phrases per language and scenario type
+VOCAB_BY_LANGUAGE: dict[str, dict[str, list[str]]] = {
+    "es": {
+        "ATTRACTION": ["¿Dónde está...?", "¿Qué tan lejos?", "gire a la izquierda", "siga derecho"],
+        "RESTAURANT": ["la carta", "quisiera", "la cuenta", "¿qué recomienda?"],
+        "HOTEL": ["una reservación", "la llave", "la hora de salida", "el desayuno"],
+    },
+    "fr": {
+        "ATTRACTION": ["Où se trouve...?", "C'est loin?", "tournez à gauche", "tout droit"],
+        "RESTAURANT": ["la carte", "je voudrais", "l'addition", "vous recommandez?"],
+        "HOTEL": ["une réservation", "la clé", "l'heure de départ", "le petit-déjeuner"],
+    },
+    "de": {
+        "ATTRACTION": ["Wo ist...?", "Wie weit?", "links abbiegen", "geradeaus"],
+        "RESTAURANT": ["die Speisekarte", "ich hätte gern", "die Rechnung", "Was empfehlen Sie?"],
+        "HOTEL": ["eine Reservierung", "der Zimmerschlüssel", "die Abreisezeit", "das Frühstück"],
+    },
+    "it": {
+        "ATTRACTION": ["Dov'è...?", "Quanto è lontano?", "giri a sinistra", "sempre dritto"],
+        "RESTAURANT": ["il menù", "vorrei", "il conto", "cosa consiglia?"],
+        "HOTEL": ["una prenotazione", "la chiave", "l'orario di check-out", "la colazione"],
+    },
+    "pt": {
+        "ATTRACTION": ["Onde fica...?", "Quão longe?", "vire à esquerda", "siga em frente"],
+        "RESTAURANT": ["o cardápio", "eu gostaria", "a conta", "o que recomenda?"],
+        "HOTEL": ["uma reserva", "a chave", "horário de saída", "o café da manhã"],
+    },
+    "ja": {
+        "ATTRACTION": ["…はどこですか？", "どのくらい遠い？", "左に曲がる", "まっすぐ"],
+        "RESTAURANT": ["メニュー", "…をお願いします", "お会計", "おすすめは？"],
+        "HOTEL": ["予約", "部屋の鍵", "チェックアウト時間", "朝食"],
+    },
+    "ko": {
+        "ATTRACTION": ["…어디에 있어요?", "얼마나 멀어요?", "왼쪽으로 도세요", "직진하세요"],
+        "RESTAURANT": ["메뉴", "…주세요", "계산서", "추천해 주세요"],
+        "HOTEL": ["예약", "방 열쇠", "체크아웃 시간", "조식"],
+    },
+    "zh": {
+        "ATTRACTION": ["…在哪里？", "有多远？", "左转", "一直走"],
+        "RESTAURANT": ["菜单", "我想要", "买单", "有什么推荐？"],
+        "HOTEL": ["预订", "房间钥匙", "退房时间", "早餐"],
+    },
+}
+
+# English fallback for languages not listed above
+_VOCAB_FALLBACK: dict[str, list[str]] = {
+    "ATTRACTION": ["Where is...?", "How far?", "turn left", "straight ahead"],
+    "RESTAURANT": ["the menu", "I would like", "the bill", "recommend"],
+    "HOTEL": ["reservation", "room key", "checkout time", "breakfast"],
+}
+
+
+def _get_vocab_for(target_language: str, item_type: str) -> list[str]:
+    """Return vocabulary phrases in the target language for a given scenario type."""
+    lang_vocab = VOCAB_BY_LANGUAGE.get(target_language, _VOCAB_FALLBACK)
+    if isinstance(lang_vocab, dict):
+        return list(lang_vocab.get(item_type, _VOCAB_FALLBACK.get(item_type, [])))
+    return list(_VOCAB_FALLBACK.get(item_type, []))
 
 
 def filter_scraped_items(items: list[dict]) -> list[dict]:
@@ -155,15 +285,33 @@ def transform_to_scenarios(
     destination: str,
     target_language: str,
 ) -> list[Scenario]:
-    """Transform filtered TripAdvisor items into Travel_Scenario objects."""
-    scenarios = []
+    """Transform filtered TripAdvisor items into Travel_Scenario objects.
+
+    Items are interleaved by type (RESTAURANT, ATTRACTION, HOTEL) so the
+    resulting list shows variety rather than a block of the same category.
+    """
+    # Group items by type
+    by_type: dict[str, list[dict]] = {"ATTRACTION": [], "RESTAURANT": [], "HOTEL": []}
     for item in items:
+        by_type.setdefault(item["type"], []).append(item)
+
+    # Round-robin interleave across types for visual variety
+    interleaved: list[dict] = []
+    type_order = ["RESTAURANT", "ATTRACTION", "HOTEL"]
+    max_len = max((len(v) for v in by_type.values()), default=0)
+    for i in range(max_len):
+        for t in type_order:
+            if i < len(by_type.get(t, [])):
+                interleaved.append(by_type[t][i])
+
+    scenarios = []
+    for item in interleaved:
         item_type = item["type"]
         template = SCENARIO_TEMPLATES[item_type]
         name = item["name"]
 
-        # Build key_vocabulary from scraped content + template base
-        key_vocab = list(template["vocab_base"])
+        # Build key_vocabulary from language-specific phrases + place data
+        key_vocab = _get_vocab_for(target_language, item_type)
         key_vocab.append(name)  # Include the real place name
         if item.get("address"):
             key_vocab.append(item["address"])
@@ -183,6 +331,7 @@ def transform_to_scenarios(
             ),
             source="generated",
             created_at=datetime.now(UTC).isoformat(),
+            thumbnail=template.get("thumbnail", "📍"),
         )
         scenarios.append(scenario)
     return scenarios

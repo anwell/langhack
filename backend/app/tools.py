@@ -7,7 +7,7 @@ They allow the AI to provide vocabulary help and signal session completion.
 from strands import tool
 from strands.experimental.bidi.tools import stop_conversation
 
-__all__ = ["get_vocabulary_hint", "signal_session_complete", "stop_conversation"]
+__all__ = ["get_vocabulary_hint", "signal_session_complete", "signal_outcome_achieved", "stop_conversation"]
 
 
 @tool
@@ -35,3 +35,16 @@ def signal_session_complete(reason: str) -> str:
         reason: Brief description of why the scenario is complete
     """
     return f"Session complete: {reason}"
+
+
+@tool
+def signal_outcome_achieved(reason: str) -> str:
+    """Signal that the learner has achieved the intended outcome of the scenario.
+
+    Use this when the learner has clearly demonstrated they can accomplish the
+    scenario's goal through the conversation. This ends the session as a pass.
+
+    Args:
+        reason: Brief description of how the learner achieved the outcome
+    """
+    return f"Outcome achieved: {reason}"

@@ -14,7 +14,7 @@ export interface LanguageSettings {
 export const DEFAULT_LANGUAGE_SETTINGS: LanguageSettings = {
   target_language: 'es',
   source_language: 'en',
-  show_live_english_translations: false,
+  show_live_english_translations: true,
 };
 
 async function readJson<T>(key: string, fallback: T): Promise<T> {

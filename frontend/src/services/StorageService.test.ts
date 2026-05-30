@@ -9,7 +9,7 @@ describe('StorageService defaults', () => {
     expect(DEFAULT_LANGUAGE_SETTINGS.source_language).toBe('en');
   });
 
-  it('does not show live English translations by default', () => {
-    expect(DEFAULT_LANGUAGE_SETTINGS.show_live_english_translations).toBe(false);
+  it('shows live English translations by default', () => {
+    expect(DEFAULT_LANGUAGE_SETTINGS.show_live_english_translations).toBe(true);
   });
 });

@@ -25,12 +25,18 @@ export async function fetchScenarios(targetLanguage?: string): Promise<Scenario[
   return requestJson<Scenario[]>(`/scenarios${query}`);
 }
 
+export interface GenerateResult {
+  scenarios: Scenario[];
+  status: 'generated' | 'fallback' | 'unavailable';
+  message?: string;
+}
+
 export async function generateScenarios(
   targetLanguage: string,
   sourceLanguage: string,
   proficiency?: string,
   destination?: string
-): Promise<Scenario[]> {
+): Promise<GenerateResult> {
   const body: Record<string, string | undefined> = {
     target_language: targetLanguage,
     source_language: sourceLanguage,
@@ -39,11 +45,15 @@ export async function generateScenarios(
   if (destination) {
     body.destination = destination;
   }
-  const payload = await requestJson<{ success: boolean; scenarios: Scenario[] }>('/scenarios/generate', {
+  const payload = await requestJson<{ success: boolean; status: string; scenarios: Scenario[]; message?: string }>('/scenarios/generate', {
     method: 'POST',
     body: JSON.stringify(body),
   });
-  return payload.success ? payload.scenarios : [];
+  return {
+    scenarios: payload.success ? payload.scenarios : [],
+    status: (payload.status as GenerateResult['status']) || 'unavailable',
+    message: payload.message,
+  };
 }
 
 export async function requestFeedback(input: {
@@ -79,4 +89,20 @@ export async function uploadTranscript(input: {
     throw new Error(payload.error || 'Cloud backup failed');
   }
   return payload.box_file_url;
+}
+
+export interface ReplySuggestion {
+  suggestion: string;
+  translation: string;
+}
+
+export async function fetchReplySuggestion(input: {
+  transcript: TranscriptEntry[];
+  target_language: string;
+  scenario_context?: string;
+}): Promise<ReplySuggestion> {
+  return requestJson<ReplySuggestion>('/suggest', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }

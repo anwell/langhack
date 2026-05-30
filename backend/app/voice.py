@@ -12,7 +12,7 @@ from strands.experimental.bidi.types.events import BidiAudioInputEvent, BidiInpu
 
 from app.config import get_settings
 from app.prompts import build_conversation_prompt
-from app.tools import get_vocabulary_hint, signal_session_complete
+from app.tools import get_vocabulary_hint, signal_session_complete, signal_outcome_achieved
 
 router = APIRouter()
 
@@ -45,7 +45,7 @@ def create_bidi_agent(system_prompt: str):
     )
     return BidiAgent(
         model=sonic_model,
-        tools=[get_vocabulary_hint, signal_session_complete, stop_conversation],
+        tools=[get_vocabulary_hint, signal_session_complete, signal_outcome_achieved, stop_conversation],
         system_prompt=system_prompt,
     )
 
@@ -199,21 +199,42 @@ async def websocket_endpoint(ws: WebSocket):
         scenario_context = init_msg.get("scenario_context", "")
         target_language = init_msg.get("target_language", "")
         show_english_translations = bool(init_msg.get("show_english_translations", False))
+        intended_outcome = init_msg.get("intended_outcome") or None
 
-        system_prompt = build_conversation_prompt(scenario_context, target_language)
+        system_prompt = build_conversation_prompt(scenario_context, target_language, intended_outcome)
         agent = create_bidi_agent(system_prompt)
+
+        # Track whether the outcome was achieved via tool call
+        outcome_achieved = False
+
+        original_signal_outcome = signal_outcome_achieved.fn if hasattr(signal_outcome_achieved, 'fn') else None
+
+        async def output_handler(event: dict[str, Any]) -> None:
+            nonlocal outcome_achieved
+            # Detect outcome_achieved tool call in events
+            if event.get("type") == "bidi_tool_use" and "signal_outcome_achieved" in str(event.get("tool_name", "")):
+                outcome_achieved = True
+            await send_client_bidi_output(
+                ws,
+                event,
+                show_english_translations=show_english_translations,
+                target_language=target_language,
+            )
 
         await agent.run(
             inputs=[create_session_input_source(ws, scenario_context, target_language)],
-            outputs=[
-                lambda event: send_client_bidi_output(
-                    ws,
-                    event,
-                    show_english_translations=show_english_translations,
-                    target_language=target_language,
-                )
-            ],
+            outputs=[output_handler],
         )
+
+        # Send outcome_achieved status to client after session ends
+        try:
+            await ws.send_json({
+                "type": "session_ended",
+                "transcript": [],
+                "outcome_achieved": outcome_achieved,
+            })
+        except Exception:
+            pass
     except WebSocketDisconnect:
         pass
     except Exception:

@@ -22,6 +22,8 @@ class Scenario(BaseModel):
     system_prompt: str
     source: Literal["preloaded", "backend", "generated"] = "preloaded"
     created_at: str
+    thumbnail: str | None = None
+    intended_outcome: str | None = None
 
 
 PRELOADED_SCENARIOS: list[Scenario] = [
@@ -33,6 +35,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["un café", "quisiera", "para llevar", "la cuenta"],
         system_prompt="You are a friendly barista in a busy Spanish-speaking café.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="☕",
+        intended_outcome="Successfully order a drink and a pastry, and pay the bill.",
     ),
     Scenario(
         id="es-directions-plaza",
@@ -42,6 +46,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["¿Dónde está...?", "gire", "siga derecho", "cerca de"],
         system_prompt="You are a helpful local giving simple directions in Spanish.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🗺️",
+        intended_outcome="Get clear directions to the plaza and confirm you understand the route.",
     ),
     Scenario(
         id="es-pharmacy-symptoms",
@@ -51,6 +57,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["me duele", "resfriado", "cada ocho horas", "receta"],
         system_prompt="You are a pharmacist helping a Spanish learner describe symptoms and choose basic medicine.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="💊",
+        intended_outcome="Describe your symptoms and obtain the right medicine with dosage instructions.",
     ),
     Scenario(
         id="es-train-ticket",
@@ -60,6 +68,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["boleto", "andén", "ida y vuelta", "retraso"],
         system_prompt="You are a train station clerk helping a traveler buy a ticket in Spanish.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🚆",
+        intended_outcome="Purchase a ticket and confirm the correct platform and departure time.",
     ),
     Scenario(
         id="es-restaurant-problem",
@@ -69,6 +79,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["disculpe", "pedí", "sin", "¿me lo puede cambiar?"],
         system_prompt="You are a restaurant server helping a Spanish learner resolve an order problem politely.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🍽️",
+        intended_outcome="Politely explain the mistake and get the correct dish brought to you.",
     ),
     Scenario(
         id="es-make-plans",
@@ -78,6 +90,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["¿te apetece?", "quedamos", "a las", "nos vemos"],
         system_prompt="You are a friendly classmate making weekend plans with a Spanish learner.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="📅",
+        intended_outcome="Agree on an activity, a time, and a meeting place for the weekend.",
     ),
     Scenario(
         id="es-airbnb-checkin",
@@ -87,6 +101,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["llaves", "llegar", "contraseña", "salida"],
         system_prompt="You are an apartment host helping a Spanish learner check in and understand house rules.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🏠",
+        intended_outcome="Get the keys, Wi-Fi password, and understand checkout time.",
     ),
     Scenario(
         id="fr-hotel-checkin",
@@ -96,6 +112,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["réservation", "petit déjeuner", "chambre", "clé"],
         system_prompt="You are a hotel receptionist helping a French learner check in.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🏨",
+        intended_outcome="Check in, get your room key, and confirm breakfast time.",
     ),
     Scenario(
         id="fr-market-shopping",
@@ -105,6 +123,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["je voudrais", "combien", "un kilo", "c'est tout"],
         system_prompt="You are a patient vendor at a French outdoor market.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🛒",
+        intended_outcome="Buy at least two items and complete the payment.",
     ),
     Scenario(
         id="fr-bakery-breakfast",
@@ -114,6 +134,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["boulangerie", "croissant", "c'est frais", "carte bancaire"],
         system_prompt="You are a bakery worker helping a French learner order breakfast.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🥐",
+        intended_outcome="Order a fresh breakfast item and pay for it.",
     ),
     Scenario(
         id="fr-museum-visit",
@@ -123,6 +145,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["billet", "horaires", "exposition", "audioguide"],
         system_prompt="You are a museum staff member helping a French learner plan a visit.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🎨",
+        intended_outcome="Buy a ticket and find out about the current exhibition.",
     ),
     Scenario(
         id="fr-doctor-appointment",
@@ -132,6 +156,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["j'ai mal", "fièvre", "depuis", "ordonnance"],
         system_prompt="You are a doctor asking clear questions to help a French learner describe symptoms.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🩺",
+        intended_outcome="Describe your symptoms clearly and understand the prescribed treatment.",
     ),
     Scenario(
         id="fr-train-delay",
@@ -141,6 +167,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["retard", "voie", "correspondance", "prochain train"],
         system_prompt="You are a station employee helping a French learner handle a train delay.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="⏱️",
+        intended_outcome="Find out the new departure time and the correct platform.",
     ),
     Scenario(
         id="fr-dinner-invitation",
@@ -150,6 +178,8 @@ PRELOADED_SCENARIOS: list[Scenario] = [
         key_vocabulary=["avec plaisir", "j'apporte", "je préfère", "à quelle heure"],
         system_prompt="You are a friendly host inviting a French learner to dinner.",
         created_at="2026-01-01T00:00:00Z",
+        thumbnail="🍷",
+        intended_outcome="Accept the invitation, share a food preference, and offer to bring something.",
     ),
 ]
 

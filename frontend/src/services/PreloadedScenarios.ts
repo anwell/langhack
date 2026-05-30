@@ -10,6 +10,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a friendly barista in a busy Spanish-speaking café.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '☕',
+    intended_outcome: 'Successfully order a drink and a pastry, and pay the bill.',
   },
   {
     id: 'es-directions-plaza',
@@ -20,6 +22,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a helpful local giving simple directions in Spanish.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🗺️',
+    intended_outcome: 'Get clear directions to the plaza and confirm you understand the route.',
   },
   {
     id: 'es-pharmacy-symptoms',
@@ -30,6 +34,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a pharmacist helping a Spanish learner describe symptoms and choose basic medicine.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '💊',
+    intended_outcome: 'Describe your symptoms and obtain the right medicine with dosage instructions.',
   },
   {
     id: 'es-train-ticket',
@@ -40,6 +46,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a train station clerk helping a traveler buy a ticket in Spanish.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🚆',
+    intended_outcome: 'Purchase a ticket and confirm the correct platform and departure time.',
   },
   {
     id: 'es-restaurant-problem',
@@ -50,6 +58,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a restaurant server helping a Spanish learner resolve an order problem politely.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🍽️',
+    intended_outcome: 'Politely explain the mistake and get the correct dish brought to you.',
   },
   {
     id: 'es-make-plans',
@@ -60,6 +70,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a friendly classmate making weekend plans with a Spanish learner.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '📅',
+    intended_outcome: 'Agree on an activity, a time, and a meeting place for the weekend.',
   },
   {
     id: 'es-airbnb-checkin',
@@ -70,6 +82,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are an apartment host helping a Spanish learner check in and understand house rules.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🏠',
+    intended_outcome: 'Get the keys, Wi-Fi password, and understand checkout time.',
   },
   {
     id: 'fr-hotel-checkin',
@@ -80,6 +94,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a hotel receptionist helping a French learner check in.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🏨',
+    intended_outcome: 'Check in, get your room key, and confirm breakfast time.',
   },
   {
     id: 'fr-market-shopping',
@@ -90,6 +106,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a patient vendor at a French outdoor market.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🛒',
+    intended_outcome: 'Buy at least two items and complete the payment.',
   },
   {
     id: 'fr-bakery-breakfast',
@@ -100,6 +118,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a bakery worker helping a French learner order breakfast.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🥐',
+    intended_outcome: 'Order a fresh breakfast item and pay for it.',
   },
   {
     id: 'fr-museum-visit',
@@ -110,6 +130,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a museum staff member helping a French learner plan a visit.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🎨',
+    intended_outcome: 'Buy a ticket and find out about the current exhibition.',
   },
   {
     id: 'fr-doctor-appointment',
@@ -120,6 +142,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a doctor asking clear questions to help a French learner describe symptoms.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🩺',
+    intended_outcome: 'Describe your symptoms clearly and understand the prescribed treatment.',
   },
   {
     id: 'fr-train-delay',
@@ -130,6 +154,8 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a station employee helping a French learner handle a train delay.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '⏱️',
+    intended_outcome: 'Find out the new departure time and the correct platform.',
   },
   {
     id: 'fr-dinner-invitation',
@@ -140,5 +166,7 @@ export const PRELOADED_SCENARIOS: Scenario[] = [
     system_prompt: 'You are a friendly host inviting a French learner to dinner.',
     source: 'preloaded',
     created_at: '2026-01-01T00:00:00Z',
+    thumbnail: '🍷',
+    intended_outcome: 'Accept the invitation, share a food preference, and offer to bring something.',
   },
 ];

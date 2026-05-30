@@ -23,6 +23,9 @@ __pycache__/
 venv/
 *.egg-info/
 
+# Apify scraper disk cache
+.apify_cache/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

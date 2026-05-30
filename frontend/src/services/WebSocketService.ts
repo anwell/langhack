@@ -18,7 +18,7 @@ export interface WebSocketEventHandlers {
     english_translation?: string;
     is_final: boolean;
   }) => void;
-  onSessionEnded?: (transcript: TranscriptEntry[]) => void;
+  onSessionEnded?: (transcript: TranscriptEntry[], outcomeAchieved?: boolean) => void;
   onError?: (error: Error) => void;
   onConnectionStateChange?: (state: ConnectionState) => void;
 }
@@ -30,6 +30,7 @@ export interface SessionConfig {
   target_language: string;
   scenario_id: string;
   show_english_translations?: boolean;
+  intended_outcome?: string;
 }
 
 const DEFAULT_WS_URL = 'ws://localhost:8000/ws';
@@ -201,7 +202,8 @@ export class WebSocketService {
         // Session ended by server — stop audio and emit event
         this.stopAudio();
         this.eventHandlers.onSessionEnded?.(
-          (message.transcript as TranscriptEntry[]) || []
+          (message.transcript as TranscriptEntry[]) || [],
+          message.outcome_achieved as boolean | undefined
         );
         if (this.ws) {
           this.ws.close();

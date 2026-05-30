@@ -18,6 +18,10 @@ export interface Scenario {
   source: "preloaded" | "backend" | "generated";
   /** ISO 8601 timestamp */
   created_at: string;
+  /** Emoji or short string used as a visual thumbnail */
+  thumbnail?: string;
+  /** The goal the learner should achieve to pass the scenario */
+  intended_outcome?: string;
 }
 
 /**

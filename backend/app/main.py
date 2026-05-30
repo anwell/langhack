@@ -10,6 +10,7 @@ from app.box_upload import router as box_upload_router
 from app.config import get_settings
 from app.scenario_agent import router as scenario_agent_router
 from app.scenarios import router as scenarios_router
+from app.suggest import router as suggest_router
 from app.teacher_agent import router as teacher_agent_router
 from app.voice import router as voice_router
 
@@ -35,6 +36,7 @@ app.include_router(scenarios_router)
 app.include_router(scenario_agent_router)
 app.include_router(teacher_agent_router)
 app.include_router(box_upload_router)
+app.include_router(suggest_router)
 
 
 @app.get("/health")

@@ -4,13 +4,15 @@ import { DEFAULT_LANGUAGE_SETTINGS, getLanguageSettings, saveLanguageSettings } 
 import { palette, shadow, tightShadow } from '../theme';
 
 const TARGET_LANGUAGES = [
-  { code: 'es', label: 'Spanish' },
-  { code: 'fr', label: 'French' },
+  { code: 'es', label: 'Spanish', flag: '🇪🇸' },
+  { code: 'fr', label: 'French', flag: '🇫🇷' },
+  { code: 'zh', label: 'Chinese', flag: '🇨🇳' },
 ];
 
 const SOURCE_LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'es', label: 'Spanish' },
+  { code: 'en', label: 'English', flag: '🇬🇧' },
+  { code: 'es', label: 'Spanish', flag: '🇪🇸' },
+  { code: 'zh', label: 'Chinese', flag: '🇨🇳' },
 ];
 
 export function SettingsScreen() {
@@ -43,70 +45,121 @@ export function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.kicker}>STUDIO CONTROLS</Text>
-      <Text style={styles.title}>Tune your practice setup</Text>
-      <View style={styles.panel}>
-        <Text style={styles.sectionTitle}>Target language</Text>
-        <View style={styles.row}>
+      <View style={styles.headerSection}>
+        <Text style={styles.headline}>Settings</Text>
+        <Text style={styles.subtitle}>Configure your learning preferences.</Text>
+      </View>
+
+      {/* Learning Path card */}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardHeaderIcon}>🌐</Text>
+          <Text style={styles.cardHeaderTitle}>Learning Path</Text>
+        </View>
+
+        <Text style={styles.label}>TARGET LANGUAGE</Text>
+        <View style={styles.optionRow}>
           {TARGET_LANGUAGES.map((language) => (
             <TouchableOpacity
               key={language.code}
-              style={[styles.choice, targetLanguage === language.code && styles.selected]}
+              style={[styles.option, targetLanguage === language.code && styles.optionSelected]}
               onPress={() => setTargetLanguage(language.code)}
             >
-              <Text style={[styles.choiceText, targetLanguage === language.code && styles.selectedText]}>{language.label}</Text>
+              <Text style={styles.optionFlag}>{language.flag}</Text>
+              <Text style={[styles.optionText, targetLanguage === language.code && styles.optionTextSelected]}>{language.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
-        <Text style={styles.sectionTitle}>Source language</Text>
-        <View style={styles.row}>
+
+        <Text style={styles.label}>SOURCE LANGUAGE</Text>
+        <View style={styles.optionRow}>
           {SOURCE_LANGUAGES.map((language) => (
             <TouchableOpacity
               key={language.code}
-              style={[styles.choice, sourceLanguage === language.code && styles.selected]}
+              style={[styles.option, sourceLanguage === language.code && styles.optionSelected]}
               onPress={() => setSourceLanguage(language.code)}
             >
-              <Text style={[styles.choiceText, sourceLanguage === language.code && styles.selectedText]}>{language.label}</Text>
+              <Text style={styles.optionFlag}>{language.flag}</Text>
+              <Text style={[styles.optionText, sourceLanguage === language.code && styles.optionTextSelected]}>{language.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
-      <View style={styles.switchRow}>
-        <View style={styles.switchCopy}>
-          <Text style={styles.sectionTitle}>Live English translations</Text>
-          <Text style={styles.helperText}>Show English below AI responses in the live transcript.</Text>
+
+      {/* Preferences card */}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardHeaderIcon}>⚙️</Text>
+          <Text style={styles.cardHeaderTitle}>Preferences</Text>
         </View>
-        <Switch
-          value={showLiveEnglishTranslations}
-          onValueChange={setShowLiveEnglishTranslations}
-          trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-          thumbColor={showLiveEnglishTranslations ? '#2563eb' : '#f9fafb'}
-          accessibilityLabel="Show English translations in live transcript"
-        />
+
+        <View style={styles.switchRow}>
+          <View style={styles.switchCopy}>
+            <Text style={styles.switchTitle}>English Translations</Text>
+            <Text style={styles.switchDescription}>Enable tap-to-translate on AI messages during conversations.</Text>
+          </View>
+          <Switch
+            value={showLiveEnglishTranslations}
+            onValueChange={setShowLiveEnglishTranslations}
+            trackColor={{ false: palette.outlineVariant, true: palette.primaryFixedDim }}
+            thumbColor={showLiveEnglishTranslations ? palette.primary : palette.surfaceContainerHighest}
+            accessibilityLabel="Enable tap-to-translate on AI messages"
+          />
+        </View>
       </View>
-      <TouchableOpacity style={styles.button} onPress={save}>
-        <Text style={styles.buttonText}>Save settings</Text>
-      </TouchableOpacity>
-      {saved ? <Text style={styles.saved}>Settings saved.</Text> : null}
+
+      {/* Save button */}
+      <View style={styles.saveSection}>
+        <TouchableOpacity style={styles.saveButton} onPress={save}>
+          <Text style={styles.saveButtonText}>Save Settings</Text>
+        </TouchableOpacity>
+        {saved && (
+          <View style={styles.savedBanner}>
+            <Text style={styles.savedText}>✓ Settings saved successfully</Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: palette.paper },
-  kicker: { color: palette.coral, fontSize: 12, fontWeight: '800', marginBottom: 8 },
-  title: { fontSize: 32, lineHeight: 36, fontWeight: '900', color: palette.ink, marginBottom: 18 },
-  panel: { backgroundColor: palette.surface, borderRadius: 8, borderWidth: 1, borderColor: palette.line, padding: 16, ...shadow },
-  sectionTitle: { fontSize: 18, fontWeight: '900', color: palette.ink, marginTop: 16, marginBottom: 10 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  switchRow: { marginTop: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  container: { flex: 1, backgroundColor: palette.background, paddingHorizontal: 20 },
+  headerSection: { paddingTop: 24, paddingBottom: 16 },
+  headline: { fontSize: 32, lineHeight: 40, fontWeight: '700', color: palette.onSurface, letterSpacing: -0.5, marginBottom: 4 },
+  subtitle: { fontSize: 16, lineHeight: 24, color: palette.onSurfaceVariant },
+
+  // Cards
+  card: { backgroundColor: palette.surfaceContainerLowest, borderRadius: 16, padding: 20, marginBottom: 16, ...shadow },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 },
+  cardHeaderIcon: { fontSize: 20 },
+  cardHeaderTitle: { fontSize: 20, lineHeight: 28, fontWeight: '600', color: palette.onSurface },
+
+  // Labels
+  label: { fontSize: 14, fontWeight: '600', letterSpacing: 0.5, color: palette.onSurfaceVariant, marginBottom: 10, marginTop: 8 },
+
+  // Language options
+  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
+  option: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderRadius: 12, borderWidth: 2, borderColor: palette.outlineVariant,
+    paddingVertical: 12, paddingHorizontal: 16, backgroundColor: palette.surfaceContainerLowest,
+  },
+  optionSelected: { borderColor: palette.primary, backgroundColor: palette.surfaceContainer, ...tightShadow },
+  optionFlag: { fontSize: 20 },
+  optionText: { fontSize: 16, fontWeight: '600', color: palette.onSurface },
+  optionTextSelected: { color: palette.primary },
+
+  // Switch
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingVertical: 8 },
   switchCopy: { flex: 1 },
-  helperText: { color: palette.muted, lineHeight: 20 },
-  choice: { borderRadius: 8, borderWidth: 1, borderColor: palette.line, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: palette.surface },
-  selected: { backgroundColor: palette.mint, borderColor: palette.teal, ...tightShadow },
-  choiceText: { color: palette.ink, fontWeight: '700' },
-  selectedText: { color: palette.ink },
-  button: { marginTop: 28, borderRadius: 8, backgroundColor: palette.ink, padding: 14, alignItems: 'center', ...tightShadow },
-  buttonText: { color: '#fff', fontWeight: '800' },
-  saved: { color: palette.success, marginTop: 12, fontWeight: '800' },
+  switchTitle: { fontSize: 16, fontWeight: '600', color: palette.onSurface },
+  switchDescription: { fontSize: 14, lineHeight: 20, color: palette.onSurfaceVariant, marginTop: 4 },
+
+  // Save
+  saveSection: { marginTop: 8 },
+  saveButton: { height: 48, borderRadius: 12, backgroundColor: palette.primary, alignItems: 'center', justifyContent: 'center', ...tightShadow },
+  saveButtonText: { color: palette.onPrimary, fontSize: 14, fontWeight: '600' },
+  savedBanner: { marginTop: 12, backgroundColor: palette.secondaryContainer, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12 },
+  savedText: { fontSize: 14, fontWeight: '600', color: palette.onSecondaryContainer },
 });
