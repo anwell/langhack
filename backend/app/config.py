@@ -6,11 +6,19 @@ Uses python-dotenv for local development (.env file support).
 
 import os
 from functools import lru_cache
+from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-load_dotenv()
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = BACKEND_DIR.parent
+
+# Load root-level defaults first, then backend/.env so the documented backend
+# secrets file works no matter whether uvicorn is started from the repository
+# root or from the backend directory.
+load_dotenv(REPO_ROOT / ".env")
+load_dotenv(BACKEND_DIR / ".env", override=True)
 
 if os.getenv("AWS_PROFILE", "") == "":
     os.environ.pop("AWS_PROFILE", None)
