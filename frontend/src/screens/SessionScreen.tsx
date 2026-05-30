@@ -23,6 +23,7 @@ import {
   SessionConfig,
 } from '../services/WebSocketService';
 import { saveSession } from '../services/StorageService';
+import { palette, shadow, tightShadow } from '../theme';
 
 // Keep screen awake during session (expo-keep-awake or no-op if unavailable)
 let activateKeepAwake: (() => void | Promise<void>) | undefined;
@@ -274,17 +275,20 @@ export function SessionScreen({
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {params?.scenario_title || 'Voice Session'}
-        </Text>
+        <View style={styles.headerTextGroup}>
+          <Text style={styles.headerKicker}>LIVE PRACTICE</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {params?.scenario_title || 'Voice Session'}
+          </Text>
+        </View>
         {isSessionActive && <PulsingIndicator />}
       </View>
 
       {/* Connection status */}
       {connectionState === 'connecting' && (
         <View style={styles.statusBar}>
-          <ActivityIndicator size="small" color="#007AFF" />
-          <Text style={styles.statusText}>Connecting...</Text>
+          <ActivityIndicator size="small" color={palette.indigo} />
+          <Text style={styles.statusText}>Opening the channel...</Text>
         </View>
       )}
 
@@ -314,9 +318,12 @@ export function SessionScreen({
         accessibilityLabel="Conversation transcript"
       >
         {transcript.length === 0 && isSessionActive && (
-          <Text style={styles.placeholderText}>
-            Listening... Start speaking in {params?.target_language || 'the target language'}.
-          </Text>
+          <View style={styles.placeholderCard}>
+          <Text style={styles.placeholderGlyph}>Listening</Text>
+            <Text style={styles.placeholderText}>
+              Listening for your first line in {params?.target_language || 'the target language'}.
+            </Text>
+          </View>
         )}
         {transcript.map((entry, index) => (
           <TranscriptBubble key={`${entry.timestamp}-${index}`} entry={entry} />
@@ -359,8 +366,10 @@ function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
       accessibilityRole="text"
       accessibilityLabel={`${isUser ? 'You' : 'AI'}: ${entry.text}`}
     >
-      <Text style={styles.bubbleLabel}>{isUser ? 'You' : 'AI'}</Text>
-      <Text style={styles.bubbleText}>{entry.text}</Text>
+      <Text style={[styles.bubbleLabel, isUser ? styles.userBubbleLabel : styles.assistantBubbleLabel]}>
+        {isUser ? 'You' : 'Coach'}
+      </Text>
+      <Text style={[styles.bubbleText, isUser ? styles.userBubbleText : styles.assistantBubbleText]}>{entry.text}</Text>
     </View>
   );
 }
@@ -382,37 +391,48 @@ function PulsingIndicator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: palette.paper,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 56 : 16,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    paddingBottom: 16,
+    backgroundColor: palette.paper,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1C1C1E',
+  headerTextGroup: {
     flex: 1,
     marginRight: 12,
+  },
+  headerKicker: {
+    color: palette.coral,
+    fontSize: 11,
+    fontWeight: '900',
+    marginBottom: 3,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: palette.ink,
+    flex: 1,
   },
   statusBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    backgroundColor: '#E8F4FD',
+    paddingVertical: 10,
+    backgroundColor: palette.lilac,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: palette.line,
   },
   statusText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#007AFF',
+    color: palette.indigo,
+    fontWeight: '800',
   },
   errorContainer: {
     flexDirection: 'row',
@@ -420,76 +440,99 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#FFF3F3',
+    backgroundColor: palette.rose,
     borderBottomWidth: 1,
-    borderBottomColor: '#FFD6D6',
+    borderBottomColor: palette.line,
   },
   errorText: {
     flex: 1,
     fontSize: 14,
-    color: '#D32F2F',
+    color: palette.danger,
   },
   retryButton: {
     marginLeft: 12,
     paddingHorizontal: 16,
     paddingVertical: 6,
-    backgroundColor: '#D32F2F',
-    borderRadius: 16,
+    backgroundColor: palette.danger,
+    borderRadius: 8,
   },
   retryButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: palette.surface,
   },
   transcriptContainer: {
     flex: 1,
   },
   transcriptContent: {
-    padding: 16,
-    paddingBottom: 24,
+    padding: 18,
+    paddingBottom: 28,
+  },
+  placeholderCard: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 8,
+    backgroundColor: palette.surface,
+    padding: 20,
+    marginTop: 36,
+    maxWidth: 340,
+    ...shadow,
+  },
+  placeholderGlyph: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: palette.teal,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   placeholderText: {
     textAlign: 'center',
     fontSize: 16,
-    color: '#8E8E93',
-    marginTop: 40,
+    color: palette.ink,
+    marginTop: 6,
+    lineHeight: 22,
+    fontWeight: '700',
   },
   bubble: {
     maxWidth: '80%',
     marginBottom: 12,
-    padding: 12,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    ...tightShadow,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#007AFF',
-    borderBottomRightRadius: 4,
+    backgroundColor: palette.indigo,
+    borderColor: palette.indigo,
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
+    backgroundColor: palette.mint,
+    borderColor: palette.line,
   },
   bubbleLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '900',
     marginBottom: 4,
-    color: '#8E8E93',
   },
+  userBubbleLabel: { color: palette.lemon },
+  assistantBubbleLabel: { color: palette.indigo },
   bubbleText: {
     fontSize: 16,
     lineHeight: 22,
-    color: '#1C1C1E',
   },
+  userBubbleText: { color: palette.surface },
+  assistantBubbleText: { color: palette.ink },
   controlsContainer: {
     alignItems: 'center',
     paddingVertical: 20,
     paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: palette.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: palette.line,
   },
   stopButton: {
     flexDirection: 'row',
@@ -497,41 +540,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
     paddingVertical: 14,
-    backgroundColor: '#FF3B30',
-    borderRadius: 28,
+    backgroundColor: palette.coral,
+    borderRadius: 8,
     minWidth: 180,
+    borderWidth: 0,
+    ...tightShadow,
   },
   stopIcon: {
     width: 16,
     height: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: palette.surface,
     borderRadius: 3,
     marginRight: 10,
   },
   stopButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: palette.surface,
   },
   sessionEndedText: {
     fontSize: 16,
-    color: '#8E8E93',
+    color: palette.muted,
+    fontWeight: '700',
   },
   pulsingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: palette.ink,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   pulsingDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#34C759',
+    backgroundColor: palette.teal,
     marginRight: 6,
   },
   pulsingText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#34C759',
+    fontWeight: '900',
+    color: palette.teal,
   },
 });
 

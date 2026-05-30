@@ -11,6 +11,7 @@ import Animated, {
   Easing,
   cancelAnimation,
 } from 'react-native-reanimated';
+import { palette, shadow } from '../theme';
 
 interface PassFailBadgeProps {
   result: 'pass' | 'fail';
@@ -137,25 +138,19 @@ const styles = StyleSheet.create({
   badge: {
     paddingVertical: 16,
     paddingHorizontal: 32,
-    borderRadius: 20,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
+    borderWidth: 1,
+    borderColor: palette.line,
+    ...shadow,
   },
   passBadge: {
-    backgroundColor: '#dcfce7',
-    borderWidth: 2,
-    borderColor: '#16a34a',
+    backgroundColor: palette.mint,
   },
   failBadge: {
-    backgroundColor: '#fee2e2',
-    borderWidth: 2,
-    borderColor: '#dc2626',
+    backgroundColor: palette.rose,
   },
   badgeEmoji: {
     fontSize: 32,
@@ -167,16 +162,16 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   passText: {
-    color: '#16a34a',
+    color: palette.success,
   },
   failText: {
-    color: '#dc2626',
+    color: palette.danger,
   },
   motivationalText: {
     marginTop: 4,
     fontSize: 14,
-    color: '#991b1b',
-    fontWeight: '500',
+    color: palette.danger,
+    fontWeight: '800',
   },
   sparkleContainer: {
     position: 'absolute',

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DEFAULT_LANGUAGE_SETTINGS, getLanguageSettings, saveLanguageSettings } from '../services/StorageService';
+import { palette, shadow, tightShadow } from '../theme';
 
 const TARGET_LANGUAGES = [
   { code: 'es', label: 'Spanish' },
@@ -34,30 +35,33 @@ export function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Settings</Text>
-      <Text style={styles.sectionTitle}>Target language</Text>
-      <View style={styles.row}>
-        {TARGET_LANGUAGES.map((language) => (
-          <TouchableOpacity
-            key={language.code}
-            style={[styles.choice, targetLanguage === language.code && styles.selected]}
-            onPress={() => setTargetLanguage(language.code)}
-          >
-            <Text style={[styles.choiceText, targetLanguage === language.code && styles.selectedText]}>{language.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <Text style={styles.sectionTitle}>Source language</Text>
-      <View style={styles.row}>
-        {SOURCE_LANGUAGES.map((language) => (
-          <TouchableOpacity
-            key={language.code}
-            style={[styles.choice, sourceLanguage === language.code && styles.selected]}
-            onPress={() => setSourceLanguage(language.code)}
-          >
-            <Text style={[styles.choiceText, sourceLanguage === language.code && styles.selectedText]}>{language.label}</Text>
-          </TouchableOpacity>
-        ))}
+      <Text style={styles.kicker}>STUDIO CONTROLS</Text>
+      <Text style={styles.title}>Tune your practice setup</Text>
+      <View style={styles.panel}>
+        <Text style={styles.sectionTitle}>Target language</Text>
+        <View style={styles.row}>
+          {TARGET_LANGUAGES.map((language) => (
+            <TouchableOpacity
+              key={language.code}
+              style={[styles.choice, targetLanguage === language.code && styles.selected]}
+              onPress={() => setTargetLanguage(language.code)}
+            >
+              <Text style={[styles.choiceText, targetLanguage === language.code && styles.selectedText]}>{language.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={styles.sectionTitle}>Source language</Text>
+        <View style={styles.row}>
+          {SOURCE_LANGUAGES.map((language) => (
+            <TouchableOpacity
+              key={language.code}
+              style={[styles.choice, sourceLanguage === language.code && styles.selected]}
+              onPress={() => setSourceLanguage(language.code)}
+            >
+              <Text style={[styles.choiceText, sourceLanguage === language.code && styles.selectedText]}>{language.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
       <TouchableOpacity style={styles.button} onPress={save}>
         <Text style={styles.buttonText}>Save settings</Text>
@@ -68,15 +72,17 @@ export function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f7f7fb' },
-  title: { fontSize: 28, fontWeight: '700', color: '#111827', marginBottom: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', marginTop: 16, marginBottom: 10 },
+  container: { flex: 1, padding: 20, backgroundColor: palette.paper },
+  kicker: { color: palette.coral, fontSize: 12, fontWeight: '800', marginBottom: 8 },
+  title: { fontSize: 32, lineHeight: 36, fontWeight: '900', color: palette.ink, marginBottom: 18 },
+  panel: { backgroundColor: palette.surface, borderRadius: 8, borderWidth: 1, borderColor: palette.line, padding: 16, ...shadow },
+  sectionTitle: { fontSize: 18, fontWeight: '900', color: palette.ink, marginTop: 16, marginBottom: 10 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  choice: { borderRadius: 999, borderWidth: 1, borderColor: '#d1d5db', paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#fff' },
-  selected: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  choiceText: { color: '#111827', fontWeight: '600' },
-  selectedText: { color: '#fff' },
-  button: { marginTop: 28, borderRadius: 12, backgroundColor: '#2563eb', padding: 14, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '700' },
-  saved: { color: '#047857', marginTop: 12 },
+  choice: { borderRadius: 8, borderWidth: 1, borderColor: palette.line, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: palette.surface },
+  selected: { backgroundColor: palette.mint, borderColor: palette.teal, ...tightShadow },
+  choiceText: { color: palette.ink, fontWeight: '700' },
+  selectedText: { color: palette.ink },
+  button: { marginTop: 28, borderRadius: 8, backgroundColor: palette.ink, padding: 14, alignItems: 'center', ...tightShadow },
+  buttonText: { color: '#fff', fontWeight: '800' },
+  saved: { color: palette.success, marginTop: 12, fontWeight: '800' },
 });
