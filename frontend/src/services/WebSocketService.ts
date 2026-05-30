@@ -12,7 +12,12 @@ import { AudioPlaybackService } from './AudioPlaybackService';
 
 /** Events emitted by the WebSocket service */
 export interface WebSocketEventHandlers {
-  onTranscript?: (entry: { role: 'user' | 'assistant'; text: string; is_final: boolean }) => void;
+  onTranscript?: (entry: {
+    role: 'user' | 'assistant';
+    text: string;
+    english_translation?: string;
+    is_final: boolean;
+  }) => void;
   onSessionEnded?: (transcript: TranscriptEntry[]) => void;
   onError?: (error: Error) => void;
   onConnectionStateChange?: (state: ConnectionState) => void;
@@ -24,6 +29,7 @@ export interface SessionConfig {
   scenario_context: string;
   target_language: string;
   scenario_id: string;
+  show_english_translations?: boolean;
 }
 
 const DEFAULT_WS_URL = 'ws://localhost:8000/ws';
@@ -178,6 +184,10 @@ export class WebSocketService {
         this.eventHandlers.onTranscript?.({
           role: message.role as 'user' | 'assistant',
           text: message.text as string,
+          english_translation:
+            typeof message.english_translation === 'string'
+              ? message.english_translation
+              : undefined,
           is_final: message.is_final as boolean,
         });
         break;

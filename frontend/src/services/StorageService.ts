@@ -8,11 +8,13 @@ const SETTINGS_KEY = 'voice_language_practice.settings';
 export interface LanguageSettings {
   target_language: string;
   source_language: string;
+  show_live_english_translations: boolean;
 }
 
 export const DEFAULT_LANGUAGE_SETTINGS: LanguageSettings = {
   target_language: 'es',
   source_language: 'en',
+  show_live_english_translations: false,
 };
 
 async function readJson<T>(key: string, fallback: T): Promise<T> {
@@ -63,7 +65,8 @@ export async function getCachedScenarios(): Promise<Scenario[]> {
 }
 
 export async function getLanguageSettings(): Promise<LanguageSettings> {
-  return readJson<LanguageSettings>(SETTINGS_KEY, DEFAULT_LANGUAGE_SETTINGS);
+  const settings = await readJson<Partial<LanguageSettings>>(SETTINGS_KEY, DEFAULT_LANGUAGE_SETTINGS);
+  return { ...DEFAULT_LANGUAGE_SETTINGS, ...settings };
 }
 
 export async function saveLanguageSettings(settings: LanguageSettings): Promise<void> {

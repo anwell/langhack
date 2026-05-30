@@ -47,8 +47,13 @@ class MockWebSocketService {
   }
 
   // Simulate receiving a transcript event
-  simulateTranscript(role: 'user' | 'assistant', text: string, is_final: boolean): void {
-    this.eventHandlers.onTranscript?.({ role, text, is_final });
+  simulateTranscript(
+    role: 'user' | 'assistant',
+    text: string,
+    is_final: boolean,
+    english_translation?: string
+  ): void {
+    this.eventHandlers.onTranscript?.({ role, text, is_final, english_translation });
   }
 
   // Simulate session ended
@@ -174,6 +179,33 @@ describe('SessionScreen logic', () => {
 
       expect(entries[0].role).toBe('user');
       expect(entries[1].role).toBe('assistant');
+    });
+
+    it('should preserve assistant English translations on final transcript entries', () => {
+      const mockService = new MockWebSocketService();
+      const entries: Array<{ role: string; text: string; english_translation?: string }> = [];
+
+      mockService.setEventHandlers({
+        onTranscript: (entry) => {
+          if (entry.is_final) {
+            entries.push({
+              role: entry.role,
+              text: entry.text,
+              english_translation: entry.english_translation,
+            });
+          }
+        },
+      });
+
+      mockService.simulateTranscript('assistant', 'Bonjour!', true, 'Hello!');
+
+      expect(entries).toEqual([
+        {
+          role: 'assistant',
+          text: 'Bonjour!',
+          english_translation: 'Hello!',
+        },
+      ]);
     });
   });
 

@@ -26,6 +26,8 @@ export interface Scenario {
 export interface TranscriptEntry {
   role: "user" | "assistant";
   text: string;
+  /** English translation of assistant target-language text, when enabled */
+  english_translation?: string;
   /** ISO 8601 timestamp */
   timestamp: string;
 }
