@@ -4,6 +4,7 @@ Provides the /ws WebSocket endpoint that creates a per-connection BidiAgent
 backed by Amazon Nova Sonic v2 for bidirectional voice streaming.
 """
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -15,6 +16,7 @@ from app.prompts import build_conversation_prompt
 from app.tools import get_vocabulary_hint, signal_session_complete, signal_outcome_achieved
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def build_session_opening_instruction(scenario_context: str, target_language: str) -> str:
@@ -238,6 +240,7 @@ async def websocket_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     except Exception:
+        logger.exception("Voice WebSocket session failed")
         try:
             await ws.send_json(
                 {

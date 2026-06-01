@@ -209,7 +209,9 @@ def test_unrendered_bidi_events_are_ignored():
     assert bidi_event_to_client_message({"type": "bidi_usage", "totalTokens": 1}) is None
 
 
-def test_websocket_startup_failure_returns_error_message(monkeypatch):
+def test_websocket_startup_failure_returns_error_message_and_logs_exception(monkeypatch, caplog):
+    import logging
+
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -222,6 +224,8 @@ def test_websocket_startup_failure_returns_error_message(monkeypatch):
 
     app = FastAPI()
     app.include_router(voice.router)
+
+    caplog.set_level(logging.ERROR, logger="app.voice")
 
     with TestClient(app).websocket_connect("/ws") as websocket:
         websocket.send_json(
@@ -236,3 +240,6 @@ def test_websocket_startup_failure_returns_error_message(monkeypatch):
             "type": "error",
             "message": "Voice session failed. Check backend AWS Bedrock configuration and logs.",
         }
+
+    assert "Voice WebSocket session failed" in caplog.text
+    assert "RuntimeError: provider startup failed" in caplog.text
