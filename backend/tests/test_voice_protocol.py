@@ -4,6 +4,7 @@ import pytest
 
 from app.voice import (
     NOVA_SONIC_PROVIDER_CONFIG,
+    VOICE_SESSION_CONNECTIVITY_ERROR_MESSAGE,
     VOICE_SESSION_GENERIC_ERROR_MESSAGE,
     VOICE_SESSION_TEMPORARY_ERROR_MESSAGE,
     bidi_event_to_client_message,
@@ -12,6 +13,7 @@ from app.voice import (
     client_message_to_bidi_event,
     create_session_input_source,
     send_client_bidi_output,
+    stop_voice_agent,
     voice_session_error_message,
 )
 
@@ -256,6 +258,28 @@ def test_voice_session_error_message_handles_nova_sonic_system_instability():
     assert voice_session_error_message(error) == VOICE_SESSION_TEMPORARY_ERROR_MESSAGE
 
 
+def test_voice_session_error_message_handles_bedrock_dns_failures():
+    error = RuntimeError("AWS_IO_DNS_INVALID_NAME: Host name was invalid for dns resolution.")
+
+    assert voice_session_error_message(error) == VOICE_SESSION_CONNECTIVITY_ERROR_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_stop_voice_agent_suppresses_cleanup_failures(caplog):
+    import logging
+
+    class FailingAgent:
+        async def stop(self):
+            raise RuntimeError("cleanup failed")
+
+    caplog.set_level(logging.ERROR, logger="app.voice")
+
+    await stop_voice_agent(FailingAgent())
+
+    assert "Voice WebSocket agent cleanup failed" in caplog.text
+    assert "RuntimeError: cleanup failed" in caplog.text
+
+
 def test_websocket_startup_failure_returns_error_message_and_logs_exception(monkeypatch, caplog):
     import logging
 
@@ -320,3 +344,43 @@ def test_websocket_system_instability_returns_retry_message(monkeypatch):
             "type": "error",
             "message": VOICE_SESSION_TEMPORARY_ERROR_MESSAGE,
         }
+
+
+def test_websocket_dns_failure_returns_connectivity_message_and_suppresses_cleanup(monkeypatch, caplog):
+    import logging
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app import voice
+
+    class FailingAgent:
+        async def run(self, **_kwargs):
+            raise RuntimeError("AWS_IO_DNS_INVALID_NAME: Host name was invalid for dns resolution.")
+
+        async def stop(self):
+            raise RuntimeError("cleanup failed")
+
+    monkeypatch.setattr(voice, "create_bidi_agent", lambda _system_prompt: FailingAgent())
+
+    app = FastAPI()
+    app.include_router(voice.router)
+
+    caplog.set_level(logging.ERROR, logger="app.voice")
+
+    with TestClient(app).websocket_connect("/ws") as websocket:
+        websocket.send_json(
+            {
+                "scenario_context": "Order at a café",
+                "target_language": "es",
+                "scenario_id": "cafe",
+            }
+        )
+
+        assert websocket.receive_json() == {
+            "type": "error",
+            "message": VOICE_SESSION_CONNECTIVITY_ERROR_MESSAGE,
+        }
+
+    assert "Voice WebSocket session failed" in caplog.text
+    assert "Voice WebSocket agent cleanup failed" in caplog.text

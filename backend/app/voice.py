@@ -22,6 +22,9 @@ VOICE_SESSION_GENERIC_ERROR_MESSAGE = "Voice session failed. Check backend AWS B
 VOICE_SESSION_TEMPORARY_ERROR_MESSAGE = (
     "Voice session failed because Amazon Nova Sonic reported temporary instability. Please try again."
 )
+VOICE_SESSION_CONNECTIVITY_ERROR_MESSAGE = (
+    "Voice session failed while connecting to Amazon Bedrock. Check AWS region and network connectivity."
+)
 NOVA_SONIC_PROVIDER_CONFIG: dict[str, Any] = {
     "audio": {
         "input_rate": 16000,
@@ -138,9 +141,20 @@ def bidi_event_to_client_message(event: dict[str, Any]) -> dict[str, Any] | None
 
 def voice_session_error_message(error: Exception) -> str:
     """Choose a client-safe voice session error message for known provider failures."""
+    error_text = str(error)
+    if "AWS_IO_DNS_INVALID_NAME" in error_text or "Host name was invalid for dns resolution" in error_text:
+        return VOICE_SESSION_CONNECTIVITY_ERROR_MESSAGE
     if "System instability detected" in str(error):
         return VOICE_SESSION_TEMPORARY_ERROR_MESSAGE
     return VOICE_SESSION_GENERIC_ERROR_MESSAGE
+
+
+async def stop_voice_agent(agent: Any) -> None:
+    """Stop a voice agent without letting cleanup failures escape the WebSocket."""
+    try:
+        await agent.stop()
+    except Exception:
+        logger.exception("Voice WebSocket agent cleanup failed")
 
 
 async def receive_client_bidi_input(ws: WebSocket) -> BidiAudioInputEvent:
@@ -272,4 +286,4 @@ async def websocket_endpoint(ws: WebSocket):
             pass
     finally:
         if agent is not None:
-            await agent.stop()
+            await stop_voice_agent(agent)
