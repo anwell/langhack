@@ -22,6 +22,20 @@ VOICE_SESSION_GENERIC_ERROR_MESSAGE = "Voice session failed. Check backend AWS B
 VOICE_SESSION_TEMPORARY_ERROR_MESSAGE = (
     "Voice session failed because Amazon Nova Sonic reported temporary instability. Please try again."
 )
+NOVA_SONIC_PROVIDER_CONFIG: dict[str, Any] = {
+    "audio": {
+        "input_rate": 16000,
+        "output_rate": 24000,
+        "voice": "tiffany",
+    },
+    "inference": {
+        "max_tokens": 2048,
+        "temperature": 0,
+    },
+    "turn_detection": {
+        "endpointingSensitivity": "MEDIUM",
+    },
+}
 
 
 def build_session_opening_instruction(scenario_context: str, target_language: str) -> str:
@@ -41,14 +55,8 @@ def create_bidi_agent(system_prompt: str):
 
     settings = get_settings()
     sonic_model = BidiNovaSonicModel(
-        region_name=settings.aws_region,
-        provider_config={
-            "audio": {
-                "input_rate": 16000,
-                "output_rate": 24000,
-                "voice": "tiffany",
-            }
-        },
+        client_config={"region": settings.aws_region},
+        provider_config=NOVA_SONIC_PROVIDER_CONFIG,
     )
     return BidiAgent(
         model=sonic_model,

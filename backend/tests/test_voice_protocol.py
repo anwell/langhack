@@ -3,10 +3,12 @@
 import pytest
 
 from app.voice import (
+    NOVA_SONIC_PROVIDER_CONFIG,
     VOICE_SESSION_GENERIC_ERROR_MESSAGE,
     VOICE_SESSION_TEMPORARY_ERROR_MESSAGE,
     bidi_event_to_client_message,
     build_session_opening_instruction,
+    create_bidi_agent,
     client_message_to_bidi_event,
     create_session_input_source,
     send_client_bidi_output,
@@ -44,6 +46,40 @@ def test_session_opening_instruction_tells_agent_to_speak_first():
     assert "Begin this es role-play now" in instruction
     assert "Speak first as the scenario character" in instruction
     assert "Order at a café" in instruction
+
+
+def test_create_bidi_agent_uses_stable_nova_sonic_configuration(monkeypatch):
+    captured_model_kwargs = {}
+    captured_agent_kwargs = {}
+
+    class FakeModel:
+        def __init__(self, **kwargs):
+            captured_model_kwargs.update(kwargs)
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            captured_agent_kwargs.update(kwargs)
+
+    monkeypatch.setattr("strands.experimental.bidi.models.BidiNovaSonicModel", FakeModel)
+    monkeypatch.setattr("strands.experimental.bidi.BidiAgent", FakeAgent)
+    monkeypatch.setattr("app.voice.get_settings", lambda: type("Settings", (), {"aws_region": "eu-north-1"})())
+
+    agent = create_bidi_agent("Speak Spanish.")
+
+    assert isinstance(agent, FakeAgent)
+    assert captured_model_kwargs == {
+        "client_config": {"region": "eu-north-1"},
+        "provider_config": NOVA_SONIC_PROVIDER_CONFIG,
+    }
+    assert captured_agent_kwargs["model"].__class__ is FakeModel
+    assert captured_agent_kwargs["system_prompt"] == "Speak Spanish."
+    assert NOVA_SONIC_PROVIDER_CONFIG["inference"] == {
+        "max_tokens": 2048,
+        "temperature": 0,
+    }
+    assert NOVA_SONIC_PROVIDER_CONFIG["turn_detection"] == {
+        "endpointingSensitivity": "MEDIUM",
+    }
 
 
 @pytest.mark.asyncio
