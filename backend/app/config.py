@@ -24,11 +24,20 @@ if os.getenv("AWS_PROFILE", "") == "":
     os.environ.pop("AWS_PROFILE", None)
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    """Read a boolean environment variable."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class Settings(BaseModel):
     """Application settings loaded from environment variables."""
 
     # AWS Configuration
     aws_region: str = os.getenv("AWS_REGION", "us-east-1")
+    voice_enable_sonic_tools: bool = env_bool("VOICE_ENABLE_SONIC_TOOLS", False)
 
     # Box.com Credentials
     box_client_id: str = os.getenv("BOX_CLIENT_ID", "")

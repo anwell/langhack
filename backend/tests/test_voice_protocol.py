@@ -50,7 +50,23 @@ def test_session_opening_instruction_tells_agent_to_speak_first():
     assert "Order at a café" in instruction
 
 
-def test_create_bidi_agent_uses_stable_nova_sonic_configuration(monkeypatch):
+def test_conversation_prompt_omits_tool_instructions_when_tools_disabled():
+    from app.prompts import build_conversation_prompt
+
+    prompt = build_conversation_prompt(
+        "Order at a café",
+        "es",
+        "Order tea",
+        enable_tools=False,
+    )
+
+    assert "signal_outcome_achieved" not in prompt
+    assert "stop_conversation" not in prompt
+    assert "signal_session_complete" not in prompt
+    assert "wrap up with a short in-character closing line" in prompt
+
+
+def test_create_bidi_agent_uses_stable_nova_sonic_configuration_without_tools_by_default(monkeypatch):
     captured_model_kwargs = {}
     captured_agent_kwargs = {}
 
@@ -64,7 +80,10 @@ def test_create_bidi_agent_uses_stable_nova_sonic_configuration(monkeypatch):
 
     monkeypatch.setattr("strands.experimental.bidi.models.BidiNovaSonicModel", FakeModel)
     monkeypatch.setattr("strands.experimental.bidi.BidiAgent", FakeAgent)
-    monkeypatch.setattr("app.voice.get_settings", lambda: type("Settings", (), {"aws_region": "eu-north-1"})())
+    monkeypatch.setattr(
+        "app.voice.get_settings",
+        lambda: type("Settings", (), {"aws_region": "eu-north-1", "voice_enable_sonic_tools": False})(),
+    )
 
     agent = create_bidi_agent("Speak Spanish.")
 
@@ -74,6 +93,7 @@ def test_create_bidi_agent_uses_stable_nova_sonic_configuration(monkeypatch):
         "provider_config": NOVA_SONIC_PROVIDER_CONFIG,
     }
     assert captured_agent_kwargs["model"].__class__ is FakeModel
+    assert captured_agent_kwargs["tools"] == []
     assert captured_agent_kwargs["system_prompt"] == "Speak Spanish."
     assert NOVA_SONIC_PROVIDER_CONFIG["inference"] == {
         "max_tokens": 2048,
@@ -82,6 +102,29 @@ def test_create_bidi_agent_uses_stable_nova_sonic_configuration(monkeypatch):
     assert NOVA_SONIC_PROVIDER_CONFIG["turn_detection"] == {
         "endpointingSensitivity": "MEDIUM",
     }
+
+
+def test_create_bidi_agent_can_enable_sonic_tools(monkeypatch):
+    captured_agent_kwargs = {}
+
+    class FakeModel:
+        def __init__(self, **_kwargs):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            captured_agent_kwargs.update(kwargs)
+
+    monkeypatch.setattr("strands.experimental.bidi.models.BidiNovaSonicModel", FakeModel)
+    monkeypatch.setattr("strands.experimental.bidi.BidiAgent", FakeAgent)
+    monkeypatch.setattr(
+        "app.voice.get_settings",
+        lambda: type("Settings", (), {"aws_region": "eu-north-1", "voice_enable_sonic_tools": False})(),
+    )
+
+    create_bidi_agent("Speak Spanish.", enable_tools=True)
+
+    assert len(captured_agent_kwargs["tools"]) == 4
 
 
 @pytest.mark.asyncio
@@ -288,7 +331,7 @@ def test_websocket_startup_failure_returns_error_message_and_logs_exception(monk
 
     from app import voice
 
-    def fail_create_bidi_agent(_system_prompt: str):
+    def fail_create_bidi_agent(_system_prompt: str, **_kwargs):
         raise RuntimeError("provider startup failed")
 
     monkeypatch.setattr(voice, "create_bidi_agent", fail_create_bidi_agent)
@@ -323,7 +366,7 @@ def test_websocket_system_instability_returns_retry_message(monkeypatch):
 
     from app import voice
 
-    def fail_create_bidi_agent(_system_prompt: str):
+    def fail_create_bidi_agent(_system_prompt: str, **_kwargs):
         raise ValidationException(message="System instability detected")
 
     monkeypatch.setattr(voice, "create_bidi_agent", fail_create_bidi_agent)
@@ -361,7 +404,7 @@ def test_websocket_dns_failure_returns_connectivity_message_and_suppresses_clean
         async def stop(self):
             raise RuntimeError("cleanup failed")
 
-    monkeypatch.setattr(voice, "create_bidi_agent", lambda _system_prompt: FailingAgent())
+    monkeypatch.setattr(voice, "create_bidi_agent", lambda _system_prompt, **_kwargs: FailingAgent())
 
     app = FastAPI()
     app.include_router(voice.router)

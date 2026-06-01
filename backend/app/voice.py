@@ -51,19 +51,24 @@ def build_session_opening_instruction(scenario_context: str, target_language: st
     )
 
 
-def create_bidi_agent(system_prompt: str):
+def create_bidi_agent(system_prompt: str, *, enable_tools: bool | None = None):
     """Create a BidiAgent lazily so REST endpoints can run without Sonic extras."""
     from strands.experimental.bidi import BidiAgent
     from strands.experimental.bidi.models import BidiNovaSonicModel
 
     settings = get_settings()
+    sonic_tools = (
+        [get_vocabulary_hint, signal_session_complete, signal_outcome_achieved, stop_conversation]
+        if (settings.voice_enable_sonic_tools if enable_tools is None else enable_tools)
+        else []
+    )
     sonic_model = BidiNovaSonicModel(
         client_config={"region": settings.aws_region},
         provider_config=NOVA_SONIC_PROVIDER_CONFIG,
     )
     return BidiAgent(
         model=sonic_model,
-        tools=[get_vocabulary_hint, signal_session_complete, signal_outcome_achieved, stop_conversation],
+        tools=sonic_tools,
         system_prompt=system_prompt,
     )
 
@@ -236,9 +241,15 @@ async def websocket_endpoint(ws: WebSocket):
         target_language = init_msg.get("target_language", "")
         show_english_translations = bool(init_msg.get("show_english_translations", False))
         intended_outcome = init_msg.get("intended_outcome") or None
+        settings = get_settings()
 
-        system_prompt = build_conversation_prompt(scenario_context, target_language, intended_outcome)
-        agent = create_bidi_agent(system_prompt)
+        system_prompt = build_conversation_prompt(
+            scenario_context,
+            target_language,
+            intended_outcome,
+            enable_tools=settings.voice_enable_sonic_tools,
+        )
+        agent = create_bidi_agent(system_prompt, enable_tools=settings.voice_enable_sonic_tools)
 
         # Track whether the outcome was achieved via tool call
         outcome_achieved = False
