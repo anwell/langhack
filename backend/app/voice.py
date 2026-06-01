@@ -18,6 +18,11 @@ from app.tools import get_vocabulary_hint, signal_session_complete, signal_outco
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+VOICE_SESSION_GENERIC_ERROR_MESSAGE = "Voice session failed. Check backend AWS Bedrock configuration and logs."
+VOICE_SESSION_TEMPORARY_ERROR_MESSAGE = (
+    "Voice session failed because Amazon Nova Sonic reported temporary instability. Please try again."
+)
+
 
 def build_session_opening_instruction(scenario_context: str, target_language: str) -> str:
     """Build the initial text event that asks the agent to start the roleplay."""
@@ -114,13 +119,20 @@ def bidi_event_to_client_message(event: dict[str, Any]) -> dict[str, Any] | None
     if event_type == "bidi_error":
         return {
             "type": "error",
-            "message": "Voice session failed. Check backend AWS Bedrock configuration and logs.",
+            "message": VOICE_SESSION_GENERIC_ERROR_MESSAGE,
             "code": event.get("code", "BidiError"),
         }
 
     # Connection start/restart, response lifecycle, usage, and tool events are not
     # rendered by the current frontend protocol.
     return None
+
+
+def voice_session_error_message(error: Exception) -> str:
+    """Choose a client-safe voice session error message for known provider failures."""
+    if "System instability detected" in str(error):
+        return VOICE_SESSION_TEMPORARY_ERROR_MESSAGE
+    return VOICE_SESSION_GENERIC_ERROR_MESSAGE
 
 
 async def receive_client_bidi_input(ws: WebSocket) -> BidiAudioInputEvent:
@@ -239,13 +251,13 @@ async def websocket_endpoint(ws: WebSocket):
             pass
     except WebSocketDisconnect:
         pass
-    except Exception:
+    except Exception as error:
         logger.exception("Voice WebSocket session failed")
         try:
             await ws.send_json(
                 {
                     "type": "error",
-                    "message": "Voice session failed. Check backend AWS Bedrock configuration and logs.",
+                    "message": voice_session_error_message(error),
                 }
             )
         except Exception:

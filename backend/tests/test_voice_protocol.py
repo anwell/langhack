@@ -3,11 +3,14 @@
 import pytest
 
 from app.voice import (
+    VOICE_SESSION_GENERIC_ERROR_MESSAGE,
+    VOICE_SESSION_TEMPORARY_ERROR_MESSAGE,
     bidi_event_to_client_message,
     build_session_opening_instruction,
     client_message_to_bidi_event,
     create_session_input_source,
     send_client_bidi_output,
+    voice_session_error_message,
 )
 
 
@@ -200,13 +203,21 @@ def test_bidi_error_maps_to_frontend_error_without_leaking_details():
 
     assert message == {
         "type": "error",
-        "message": "Voice session failed. Check backend AWS Bedrock configuration and logs.",
+        "message": VOICE_SESSION_GENERIC_ERROR_MESSAGE,
         "code": "ProviderError",
     }
 
 
 def test_unrendered_bidi_events_are_ignored():
     assert bidi_event_to_client_message({"type": "bidi_usage", "totalTokens": 1}) is None
+
+
+def test_voice_session_error_message_handles_nova_sonic_system_instability():
+    from aws_sdk_bedrock_runtime.models import ValidationException
+
+    error = ValidationException(message="System instability detected")
+
+    assert voice_session_error_message(error) == VOICE_SESSION_TEMPORARY_ERROR_MESSAGE
 
 
 def test_websocket_startup_failure_returns_error_message_and_logs_exception(monkeypatch, caplog):
@@ -238,8 +249,38 @@ def test_websocket_startup_failure_returns_error_message_and_logs_exception(monk
 
         assert websocket.receive_json() == {
             "type": "error",
-            "message": "Voice session failed. Check backend AWS Bedrock configuration and logs.",
+            "message": VOICE_SESSION_GENERIC_ERROR_MESSAGE,
         }
 
     assert "Voice WebSocket session failed" in caplog.text
     assert "RuntimeError: provider startup failed" in caplog.text
+
+
+def test_websocket_system_instability_returns_retry_message(monkeypatch):
+    from aws_sdk_bedrock_runtime.models import ValidationException
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app import voice
+
+    def fail_create_bidi_agent(_system_prompt: str):
+        raise ValidationException(message="System instability detected")
+
+    monkeypatch.setattr(voice, "create_bidi_agent", fail_create_bidi_agent)
+
+    app = FastAPI()
+    app.include_router(voice.router)
+
+    with TestClient(app).websocket_connect("/ws") as websocket:
+        websocket.send_json(
+            {
+                "scenario_context": "Order at a café",
+                "target_language": "es",
+                "scenario_id": "cafe",
+            }
+        )
+
+        assert websocket.receive_json() == {
+            "type": "error",
+            "message": VOICE_SESSION_TEMPORARY_ERROR_MESSAGE,
+        }
